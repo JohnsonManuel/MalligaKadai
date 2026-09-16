@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SparFuchs — Wöchentliche Supermarkt-Angebote vergleichen</title>
+  <meta name="description" content="Wähle deine Lieblingsprodukte und finde jede Woche den günstigsten Supermarkt in deiner Nähe." />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦊</text></svg>" />
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="wrap topbar-inner">
+      <div class="brand">
+        <span class="brand-logo">🦊</span>
+        <div>
+          <div class="brand-name">SparFuchs</div>
+          <div class="brand-tag">Günstigster Supermarkt der Woche</div>
+        </div>
+      </div>
+      <div class="week-badge" id="weekBadge">Angebotswoche wird geladen…</div>
+    </div>
+  </header>
+
+  <main class="wrap">
+
+    <!-- STEP 1: favorites -->
+    <section class="panel">
+      <div class="panel-head">
+        <h2>1 · Deine Lieblingsprodukte</h2>
+        <span class="muted" id="favCount">0 ausgewählt</span>
+      </div>
+      <input id="search" class="search" type="search" placeholder="Produkt suchen … (z. B. Monster, Milch, Hähnchen)" autocomplete="off" />
+      <div id="catalog" class="catalog-grid"></div>
+    </section>
+
+    <!-- STEP 2: location + strategy -->
+    <section class="panel">
+      <div class="panel-head">
+        <h2>2 · Standort &amp; Priorität</h2>
+      </div>
+      <div class="loc-row">
+        <button id="locBtn" class="btn">📍 Meinen Standort verwenden</button>
+        <span id="locStatus" class="muted">Ohne Standort zeigen wir den bundesweit günstigsten Preis.</span>
+      </div>
+      <div class="strategy" id="strategy">
+        <label class="strat-opt">
+          <input type="radio" name="strat" value="cheapest" checked />
+          <span><strong>Günstigster Preis</strong><small>Bester Preis, egal welcher Markt</small></span>
+        </label>
+        <label class="strat-opt is-locked" data-lock="1">
+          <input type="radio" name="strat" value="nearest" disabled />
+          <span><strong>Nächster Markt</strong><small>Preise im nächstgelegenen Laden</small></span>
+        </label>
+        <label class="strat-opt is-locked" data-lock="1">
+          <input type="radio" name="strat" value="balanced" disabled />
+          <span><strong>Beste Wahl in der Nähe</strong><small>Günstigster unter deinen 3 nächsten Märkten</small></span>
+        </label>
+      </div>
+      <div id="nearby" class="nearby hidden"></div>
+    </section>
+
+    <!-- STEP 3: results -->
+    <section class="panel">
+      <div class="panel-head">
+        <h2>3 · Beste Preise diese Woche</h2>
+      </div>
+      <div id="summary" class="summary hidden"></div>
+      <div id="results" class="results"></div>
+    </section>
+
+  </main>
+
+  <footer class="wrap foot">
+    <p id="dataMeta" class="muted"></p>
+    <p class="muted small">Demo mit Beispieldaten für Deutschland. Preise dienen nur zur Veranschaulichung. · <span id="notifyNote">Wöchentliche Benachrichtigungen: geplant.</span></p>
+  </footer>
+
+  <script src="js/app.js"></script>
+</body>
+</html>

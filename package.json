@@ -1,0 +1,11 @@
+{
+  "name": "sparfuchs",
+  "version": "0.1.0",
+  "description": "Compare weekly German supermarket offers and find the cheapest / closest store for your favorite products.",
+  "private": true,
+  "scripts": {
+    "fetch": "node scripts/fetch-offers.js",
+    "serve": "node scripts/serve.js",
+    "start": "npm run fetch && npm run serve"
+  }
+}

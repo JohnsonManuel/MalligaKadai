@@ -1,0 +1,717 @@
+{
+  "generatedAt": "2026-09-16T18:48:58.912Z",
+  "source": "seed",
+  "weekOf": "2026-09-14",
+  "validUntil": "2026-09-19",
+  "offers": [
+    {
+      "productId": "haehnchenbrust",
+      "chainId": "rewe",
+      "price": 7.99,
+      "onOffer": false
+    },
+    {
+      "productId": "haehnchenbrust",
+      "chainId": "edeka",
+      "price": 8.49,
+      "onOffer": false
+    },
+    {
+      "productId": "haehnchenbrust",
+      "chainId": "lidl",
+      "price": 6.66,
+      "onOffer": true,
+      "wasPrice": 8.49
+    },
+    {
+      "productId": "haehnchenbrust",
+      "chainId": "aldi-sued",
+      "price": 6.99,
+      "onOffer": false
+    },
+    {
+      "productId": "haehnchenbrust",
+      "chainId": "penny",
+      "price": 6.79,
+      "onOffer": false
+    },
+    {
+      "productId": "haehnchenbrust",
+      "chainId": "netto",
+      "price": 6.49,
+      "onOffer": true,
+      "wasPrice": 7.99
+    },
+    {
+      "productId": "haehnchenbrust",
+      "chainId": "kaufland",
+      "price": 6.98,
+      "onOffer": false
+    },
+    {
+      "productId": "hackfleisch",
+      "chainId": "rewe",
+      "price": 3.49,
+      "onOffer": false
+    },
+    {
+      "productId": "hackfleisch",
+      "chainId": "edeka",
+      "price": 3.99,
+      "onOffer": false
+    },
+    {
+      "productId": "hackfleisch",
+      "chainId": "lidl",
+      "price": 2.99,
+      "onOffer": false
+    },
+    {
+      "productId": "hackfleisch",
+      "chainId": "aldi-sued",
+      "price": 2.89,
+      "onOffer": false
+    },
+    {
+      "productId": "hackfleisch",
+      "chainId": "penny",
+      "price": 3.19,
+      "onOffer": false
+    },
+    {
+      "productId": "hackfleisch",
+      "chainId": "netto",
+      "price": 2.99,
+      "onOffer": false
+    },
+    {
+      "productId": "hackfleisch",
+      "chainId": "kaufland",
+      "price": 2.79,
+      "onOffer": true,
+      "wasPrice": 3.49
+    },
+    {
+      "productId": "monster",
+      "chainId": "rewe",
+      "price": 1.49,
+      "onOffer": false
+    },
+    {
+      "productId": "monster",
+      "chainId": "edeka",
+      "price": 1.59,
+      "onOffer": false
+    },
+    {
+      "productId": "monster",
+      "chainId": "lidl",
+      "price": 0.99,
+      "onOffer": false
+    },
+    {
+      "productId": "monster",
+      "chainId": "aldi-sued",
+      "price": 0.95,
+      "onOffer": false
+    },
+    {
+      "productId": "monster",
+      "chainId": "penny",
+      "price": 1.29,
+      "onOffer": false
+    },
+    {
+      "productId": "monster",
+      "chainId": "netto",
+      "price": 1.19,
+      "onOffer": false
+    },
+    {
+      "productId": "monster",
+      "chainId": "kaufland",
+      "price": 0.89,
+      "onOffer": true,
+      "wasPrice": 1.29
+    },
+    {
+      "productId": "redbull",
+      "chainId": "rewe",
+      "price": 1.19,
+      "onOffer": false
+    },
+    {
+      "productId": "redbull",
+      "chainId": "edeka",
+      "price": 1.25,
+      "onOffer": false
+    },
+    {
+      "productId": "redbull",
+      "chainId": "lidl",
+      "price": 0.99,
+      "onOffer": false
+    },
+    {
+      "productId": "redbull",
+      "chainId": "penny",
+      "price": 1.09,
+      "onOffer": false
+    },
+    {
+      "productId": "redbull",
+      "chainId": "netto",
+      "price": 0.99,
+      "onOffer": false
+    },
+    {
+      "productId": "redbull",
+      "chainId": "kaufland",
+      "price": 0.95,
+      "onOffer": false
+    },
+    {
+      "productId": "cola",
+      "chainId": "rewe",
+      "price": 1.49,
+      "onOffer": false
+    },
+    {
+      "productId": "cola",
+      "chainId": "edeka",
+      "price": 1.55,
+      "onOffer": false
+    },
+    {
+      "productId": "cola",
+      "chainId": "lidl",
+      "price": 1.19,
+      "onOffer": false
+    },
+    {
+      "productId": "cola",
+      "chainId": "penny",
+      "price": 1.39,
+      "onOffer": false
+    },
+    {
+      "productId": "cola",
+      "chainId": "netto",
+      "price": 1.29,
+      "onOffer": false
+    },
+    {
+      "productId": "cola",
+      "chainId": "kaufland",
+      "price": 1.11,
+      "onOffer": true,
+      "wasPrice": 1.49
+    },
+    {
+      "productId": "bier",
+      "chainId": "rewe",
+      "price": 13.99,
+      "onOffer": false
+    },
+    {
+      "productId": "bier",
+      "chainId": "edeka",
+      "price": 14.49,
+      "onOffer": false
+    },
+    {
+      "productId": "bier",
+      "chainId": "penny",
+      "price": 11.99,
+      "onOffer": false
+    },
+    {
+      "productId": "bier",
+      "chainId": "netto",
+      "price": 9.99,
+      "onOffer": true,
+      "wasPrice": 12.99
+    },
+    {
+      "productId": "bier",
+      "chainId": "kaufland",
+      "price": 10.99,
+      "onOffer": false
+    },
+    {
+      "productId": "milch",
+      "chainId": "rewe",
+      "price": 1.09,
+      "onOffer": false
+    },
+    {
+      "productId": "milch",
+      "chainId": "edeka",
+      "price": 1.15,
+      "onOffer": false
+    },
+    {
+      "productId": "milch",
+      "chainId": "lidl",
+      "price": 0.95,
+      "onOffer": false
+    },
+    {
+      "productId": "milch",
+      "chainId": "aldi-sued",
+      "price": 0.95,
+      "onOffer": false
+    },
+    {
+      "productId": "milch",
+      "chainId": "penny",
+      "price": 0.99,
+      "onOffer": false
+    },
+    {
+      "productId": "milch",
+      "chainId": "netto",
+      "price": 0.95,
+      "onOffer": false
+    },
+    {
+      "productId": "milch",
+      "chainId": "kaufland",
+      "price": 0.89,
+      "onOffer": false
+    },
+    {
+      "productId": "butter",
+      "chainId": "rewe",
+      "price": 1.99,
+      "onOffer": false
+    },
+    {
+      "productId": "butter",
+      "chainId": "edeka",
+      "price": 2.19,
+      "onOffer": false
+    },
+    {
+      "productId": "butter",
+      "chainId": "lidl",
+      "price": 1.69,
+      "onOffer": false
+    },
+    {
+      "productId": "butter",
+      "chainId": "aldi-sued",
+      "price": 1.69,
+      "onOffer": false
+    },
+    {
+      "productId": "butter",
+      "chainId": "penny",
+      "price": 1.79,
+      "onOffer": false
+    },
+    {
+      "productId": "butter",
+      "chainId": "netto",
+      "price": 1.69,
+      "onOffer": false
+    },
+    {
+      "productId": "butter",
+      "chainId": "kaufland",
+      "price": 1.59,
+      "onOffer": true,
+      "wasPrice": 1.99
+    },
+    {
+      "productId": "eier",
+      "chainId": "rewe",
+      "price": 2.79,
+      "onOffer": false
+    },
+    {
+      "productId": "eier",
+      "chainId": "edeka",
+      "price": 2.99,
+      "onOffer": false
+    },
+    {
+      "productId": "eier",
+      "chainId": "lidl",
+      "price": 2.19,
+      "onOffer": false
+    },
+    {
+      "productId": "eier",
+      "chainId": "aldi-sued",
+      "price": 2.19,
+      "onOffer": false
+    },
+    {
+      "productId": "eier",
+      "chainId": "penny",
+      "price": 2.49,
+      "onOffer": false
+    },
+    {
+      "productId": "eier",
+      "chainId": "netto",
+      "price": 2.29,
+      "onOffer": false
+    },
+    {
+      "productId": "eier",
+      "chainId": "kaufland",
+      "price": 1.99,
+      "onOffer": true,
+      "wasPrice": 2.69
+    },
+    {
+      "productId": "kaese",
+      "chainId": "rewe",
+      "price": 3.49,
+      "onOffer": false
+    },
+    {
+      "productId": "kaese",
+      "chainId": "edeka",
+      "price": 3.79,
+      "onOffer": false
+    },
+    {
+      "productId": "kaese",
+      "chainId": "lidl",
+      "price": 2.99,
+      "onOffer": false
+    },
+    {
+      "productId": "kaese",
+      "chainId": "aldi-sued",
+      "price": 2.89,
+      "onOffer": false
+    },
+    {
+      "productId": "kaese",
+      "chainId": "kaufland",
+      "price": 2.79,
+      "onOffer": false
+    },
+    {
+      "productId": "kaffee",
+      "chainId": "rewe",
+      "price": 5.99,
+      "onOffer": false
+    },
+    {
+      "productId": "kaffee",
+      "chainId": "edeka",
+      "price": 6.49,
+      "onOffer": false
+    },
+    {
+      "productId": "kaffee",
+      "chainId": "lidl",
+      "price": 4.44,
+      "onOffer": true,
+      "wasPrice": 5.99
+    },
+    {
+      "productId": "kaffee",
+      "chainId": "aldi-sued",
+      "price": 4.99,
+      "onOffer": false
+    },
+    {
+      "productId": "kaffee",
+      "chainId": "penny",
+      "price": 4.79,
+      "onOffer": false
+    },
+    {
+      "productId": "kaffee",
+      "chainId": "netto",
+      "price": 4.99,
+      "onOffer": false
+    },
+    {
+      "productId": "kaffee",
+      "chainId": "kaufland",
+      "price": 3.99,
+      "onOffer": true,
+      "wasPrice": 5.49
+    },
+    {
+      "productId": "nutella",
+      "chainId": "rewe",
+      "price": 3.29,
+      "onOffer": false
+    },
+    {
+      "productId": "nutella",
+      "chainId": "edeka",
+      "price": 3.49,
+      "onOffer": false
+    },
+    {
+      "productId": "nutella",
+      "chainId": "lidl",
+      "price": 2.99,
+      "onOffer": false
+    },
+    {
+      "productId": "nutella",
+      "chainId": "penny",
+      "price": 2.99,
+      "onOffer": false
+    },
+    {
+      "productId": "nutella",
+      "chainId": "netto",
+      "price": 2.99,
+      "onOffer": false
+    },
+    {
+      "productId": "nutella",
+      "chainId": "kaufland",
+      "price": 2.79,
+      "onOffer": false
+    },
+    {
+      "productId": "bananen",
+      "chainId": "rewe",
+      "price": 1.49,
+      "onOffer": false
+    },
+    {
+      "productId": "bananen",
+      "chainId": "edeka",
+      "price": 1.59,
+      "onOffer": false
+    },
+    {
+      "productId": "bananen",
+      "chainId": "lidl",
+      "price": 1.11,
+      "onOffer": false
+    },
+    {
+      "productId": "bananen",
+      "chainId": "aldi-sued",
+      "price": 1.19,
+      "onOffer": false
+    },
+    {
+      "productId": "bananen",
+      "chainId": "penny",
+      "price": 1.29,
+      "onOffer": false
+    },
+    {
+      "productId": "bananen",
+      "chainId": "netto",
+      "price": 1.19,
+      "onOffer": false
+    },
+    {
+      "productId": "bananen",
+      "chainId": "kaufland",
+      "price": 1.09,
+      "onOffer": false
+    },
+    {
+      "productId": "tomaten",
+      "chainId": "rewe",
+      "price": 2.49,
+      "onOffer": false
+    },
+    {
+      "productId": "tomaten",
+      "chainId": "edeka",
+      "price": 2.99,
+      "onOffer": false
+    },
+    {
+      "productId": "tomaten",
+      "chainId": "lidl",
+      "price": 1.99,
+      "onOffer": false
+    },
+    {
+      "productId": "tomaten",
+      "chainId": "aldi-sued",
+      "price": 1.99,
+      "onOffer": false
+    },
+    {
+      "productId": "tomaten",
+      "chainId": "netto",
+      "price": 2.29,
+      "onOffer": false
+    },
+    {
+      "productId": "spaghetti",
+      "chainId": "rewe",
+      "price": 0.89,
+      "onOffer": false
+    },
+    {
+      "productId": "spaghetti",
+      "chainId": "edeka",
+      "price": 0.99,
+      "onOffer": false
+    },
+    {
+      "productId": "spaghetti",
+      "chainId": "lidl",
+      "price": 0.59,
+      "onOffer": false
+    },
+    {
+      "productId": "spaghetti",
+      "chainId": "aldi-sued",
+      "price": 0.55,
+      "onOffer": false
+    },
+    {
+      "productId": "spaghetti",
+      "chainId": "penny",
+      "price": 0.69,
+      "onOffer": false
+    },
+    {
+      "productId": "spaghetti",
+      "chainId": "netto",
+      "price": 0.65,
+      "onOffer": false
+    },
+    {
+      "productId": "spaghetti",
+      "chainId": "kaufland",
+      "price": 0.49,
+      "onOffer": false
+    },
+    {
+      "productId": "pizza",
+      "chainId": "rewe",
+      "price": 2.49,
+      "onOffer": false
+    },
+    {
+      "productId": "pizza",
+      "chainId": "edeka",
+      "price": 2.99,
+      "onOffer": false
+    },
+    {
+      "productId": "pizza",
+      "chainId": "lidl",
+      "price": 1.99,
+      "onOffer": false
+    },
+    {
+      "productId": "pizza",
+      "chainId": "aldi-sued",
+      "price": 1.79,
+      "onOffer": false
+    },
+    {
+      "productId": "pizza",
+      "chainId": "penny",
+      "price": 2.29,
+      "onOffer": false
+    },
+    {
+      "productId": "pizza",
+      "chainId": "netto",
+      "price": 1.99,
+      "onOffer": false
+    },
+    {
+      "productId": "pizza",
+      "chainId": "kaufland",
+      "price": 1.66,
+      "onOffer": true,
+      "wasPrice": 2.29
+    },
+    {
+      "productId": "chips",
+      "chainId": "rewe",
+      "price": 1.49,
+      "onOffer": false
+    },
+    {
+      "productId": "chips",
+      "chainId": "edeka",
+      "price": 1.79,
+      "onOffer": false
+    },
+    {
+      "productId": "chips",
+      "chainId": "lidl",
+      "price": 0.99,
+      "onOffer": true,
+      "wasPrice": 1.49
+    },
+    {
+      "productId": "chips",
+      "chainId": "penny",
+      "price": 1.29,
+      "onOffer": false
+    },
+    {
+      "productId": "chips",
+      "chainId": "netto",
+      "price": 1.19,
+      "onOffer": false
+    },
+    {
+      "productId": "chips",
+      "chainId": "kaufland",
+      "price": 0.95,
+      "onOffer": false
+    },
+    {
+      "productId": "toilettenpapier",
+      "chainId": "rewe",
+      "price": 3.49,
+      "onOffer": false
+    },
+    {
+      "productId": "toilettenpapier",
+      "chainId": "edeka",
+      "price": 3.99,
+      "onOffer": false
+    },
+    {
+      "productId": "toilettenpapier",
+      "chainId": "lidl",
+      "price": 2.49,
+      "onOffer": false
+    },
+    {
+      "productId": "toilettenpapier",
+      "chainId": "aldi-sued",
+      "price": 2.45,
+      "onOffer": false
+    },
+    {
+      "productId": "toilettenpapier",
+      "chainId": "penny",
+      "price": 2.99,
+      "onOffer": false
+    },
+    {
+      "productId": "toilettenpapier",
+      "chainId": "netto",
+      "price": 2.79,
+      "onOffer": false
+    },
+    {
+      "productId": "toilettenpapier",
+      "chainId": "kaufland",
+      "price": 2.22,
+      "onOffer": true,
+      "wasPrice": 2.99
+    }
+  ]
+}
