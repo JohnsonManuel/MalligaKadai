@@ -60,9 +60,45 @@ SOURCE=marktguru node scripts/fetch-offers.js  # once you implement + review ToS
 - **Linux/macOS (cron):** `0 6 * * * cd /path/to/sparfuchs && node scripts/fetch-offers.js`
 - **CI:** a daily GitHub Action that runs the fetch and commits/deploys the JSON.
 
+## Real data: the kaufDA pipeline (Berlin 10178)
+
+A working real-data source is wired up, scoped to **one postal code, Berlin 10178**, pulling
+live weekly offers from **kaufDA.de** (Bonial). It is **structured-first** — kaufDA server-renders
+fully structured offers into its page (`__NEXT_DATA__`), so a plain HTTP fetch + JSON parse gets
+`title, brand, retailer, price, was-price, unit price, brochure + page, image URL` with **no OCR**.
+
+```bash
+node scripts/fetch-kaufda.js            # default location (10178) from config/locations.json
+ZIP=10178 node scripts/fetch-kaufda.js  # explicit
+```
+
+It searches kaufDA at the location for each product in `data/catalog.json` (plus a few broad grocery
+terms) and writes into the project folder:
+
+- `data/kaufda/10178/offers-latest.json` — normalized offers the app/DB can use (tracked in git).
+- `data/kaufda/10178/raw-<date>.json` — full-fidelity raw snapshot + brochure metadata (gitignored).
+
+Typical run: **~400 unique offers across ~18 retailers** (REWE, EDEKA, Lidl, ALDI Nord, Penny,
+Netto, Kaufland, Rossmann, …), most with a valid-until date and a was-price.
+
+**Files:** `scripts/adapters/kaufda.js` (fetch + normalize), `scripts/lib/nextdata.js` (SSR parse),
+`scripts/fetch-kaufda.js` (CLI), `config/locations.json` (add more zips here).
+
+**Legal / politeness (important):** kaufDA/Bonial terms restrict scraping, and brochure **images**
+are the retailers' copyrighted material. This pipeline is a **personal/dev prototype**: one postal
+code, weekly cadence, low request volume, a real User-Agent, and it stores **only extracted facts +
+references image URLs (never downloads/rehosts images)**. A public launch would need a licensed feed.
+
+**Known limits (next steps):** per-term search returns up to 24 offers (broad terms like "Käse" have
+more available — see `perTerm` in the raw file); wiring these offers into the frontend, matching them
+to the catalog, and the Postgres load are the follow-ups.
+
 ## Roadmap
 
-- [ ] Real data source behind the adapter (API preferred over scraping)
+- [x] Real data source (kaufDA, Berlin 10178) — structured-first, saved to `data/kaufda/`
+- [ ] Surface kaufDA offers in the frontend + match to the catalog
+- [ ] Load offers into Postgres with full-text search; schedule weekly
+- [ ] Expand beyond 10178 / paginate broad search terms
 - [ ] Weekly notification when favorites hit their cheapest (channel TBD — email is simplest)
 - [ ] Real store-locator data per chain (current branches are a Munich/Berlin sample)
 - [ ] Postal-code entry as a fallback to GPS

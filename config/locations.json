@@ -1,0 +1,7 @@
+{
+  "_comment": "Locations the kaufDA pipeline can fetch. lat/lng come from the kaufDA location picker (Google Places). Add more zips here to expand coverage. 'default' selects which one fetch-kaufda.js uses unless overridden by ZIP env var.",
+  "default": "10178",
+  "locations": {
+    "10178": { "zip": "10178", "city": "Berlin", "lat": "52.5221879", "lng": "13.4093313" }
+  }
+}

@@ -1,5 +1,8 @@
 node_modules/
 *.log
+
+# kaufDA raw snapshots: large (~1 MB/run) and regenerable; keep offers-latest.json tracked.
+data/kaufda/**/raw-*.json
 .DS_Store
 Thumbs.db
 .env
