@@ -11,11 +11,33 @@ const state = {
   userLoc: null,          // {lat,lng}
   locLabel: null,         // human-readable location label
   nearestChainIds: [],    // 3 nearest chains (by closest branch)
-  strategy: "cheapest"
+  strategy: "cheapest",
+  // real data (kaufDA)
+  mode: "real",           // "real" | "demo"
+  kaufda: null,           // loaded offers-latest.json
+  termIndex: new Map()    // searchTerm -> [offers]
 };
 
 const $ = (s) => document.querySelector(s);
 const eur = (n) => n.toLocaleString("de-DE", { style: "currency", currency: "EUR" });
+const fmtDay = (d) => new Date(d).toLocaleDateString("de-DE", { day: "2-digit", month: "long" });
+const fmtShort = (d) => new Date(d).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit" });
+
+// Must match the term derivation in scripts/fetch-kaufda.js so favorites map to offers.
+const termFor = (p) => (p.name.split("(")[0] || p.name).trim();
+
+function hashHue(s) { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0; return h % 360; }
+
+// Visual identity for a retailer on a kaufDA offer (mapped chains reuse stores.json colors).
+function retailerVisual(o) {
+  const c = o.chainId && state.chains.get(o.chainId);
+  if (c) return { color: c.color, initials: c.initials, name: o.retailer || c.name };
+  const name = o.retailer || "?";
+  const initials = (name.replace(/[^A-Za-zÄÖÜäöü]/g, "").slice(0, 2) || name.slice(0, 2)).toUpperCase();
+  return { color: `hsl(${hashHue(name)} 52% 42%)`, initials, name };
+}
+const chipHTML = (v) => `<span class="chip"><span class="dot" style="background:${v.color}">${v.initials}</span>${v.name}</span>`;
+const esc = (s) => (s || "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
 function loadFavorites() {
   try { return JSON.parse(localStorage.getItem("sf_favorites") || "[]"); }
@@ -104,6 +126,92 @@ function chip(chainId) {
 }
 
 function renderResults() {
+  return state.mode === "real" && state.kaufda ? renderRealResults() : renderDemoResults();
+}
+
+// ---- REAL results (kaufDA offers for Berlin 10178) ----
+function renderRealResults() {
+  const wrap = $("#results");
+  const summary = $("#summary");
+  wrap.innerHTML = "";
+
+  if (!state.favorites.length) {
+    summary.classList.add("hidden");
+    wrap.innerHTML = `<div class="empty">Wähle oben deine Lieblingsprodukte aus, um echte Angebote in Berlin&nbsp;10178 zu sehen.</div>`;
+    return;
+  }
+
+  let basket = 0, saved = 0, found = 0;
+  const frag = document.createDocumentFragment();
+
+  for (const pid of state.favorites) {
+    const p = product(pid);
+    const offers = (state.termIndex.get(termFor(p)) || [])
+      .filter((o) => typeof o.price === "number" && o.price > 0)
+      .sort((a, b) => a.price - b.price);
+
+    const card = document.createElement("div");
+    card.className = "rescard";
+
+    if (!offers.length) {
+      card.innerHTML = `<div class="rescard-top">
+        <span class="emoji">${p.emoji}</span>
+        <div class="titles"><div class="pname">${esc(p.name)}</div>
+        <div class="punit">${esc(p.unit)}</div></div>
+        <div class="best"><div class="where">Diese Woche kein Angebot</div></div></div>`;
+      frag.appendChild(card);
+      continue;
+    }
+
+    found++;
+    const best = offers[0];
+    const bv = retailerVisual(best);
+    basket += best.price;
+    const dealNow = best.wasPrice && best.wasPrice > best.price;
+    if (dealNow) saved += best.wasPrice - best.price;
+
+    const rows = offers.map((o) => {
+      const v = retailerVisual(o);
+      const label = `${o.brand ? `<b>${esc(o.brand)}</b> ` : ""}${esc(o.productTitle)}${o.unitPrice ? ` · ${esc(o.unitPrice)}` : ""}`;
+      const price = `${esc(o.priceFormatted) || eur(o.price)}${o.wasPrice ? ` <s>${eur(o.wasPrice)}</s>` : ""}`;
+      return `<div class="orow ${o === best ? "win" : ""}">${chipHTML(v)}<span class="oname">${label}</span><span class="oprice">${price}</span></div>`;
+    }).join("");
+
+    card.innerHTML = `
+      <div class="rescard-top">
+        <span class="emoji">${p.emoji}</span>
+        <div class="titles">
+          <div class="pname">${esc(p.name)}${dealNow ? `<span class="tag-offer">ANGEBOT</span>` : ""}</div>
+          <div class="punit">${chipHTML(bv)} · ${best.brand ? esc(best.brand) + " " : ""}${esc(best.productTitle)}</div>
+        </div>
+        <div class="best">
+          <div class="price ${dealNow ? "deal" : ""}">${esc(best.priceFormatted) || eur(best.price)}</div>
+          ${best.wasPrice ? `<div class="was">${eur(best.wasPrice)}</div>` : ""}
+          ${best.validUntil ? `<div class="valid">bis ${fmtShort(best.validUntil)}</div>` : ""}
+        </div>
+      </div>
+      <span class="toggle">Alle ${offers.length} Angebote ansehen ▾</span>
+      <div class="allprices rows">${rows}</div>`;
+
+    card.querySelector(".toggle").addEventListener("click", (e) => {
+      card.classList.toggle("open");
+      e.target.textContent = card.classList.contains("open")
+        ? `Angebote ausblenden ▴` : `Alle ${offers.length} Angebote ansehen ▾`;
+    });
+    frag.appendChild(card);
+  }
+
+  wrap.appendChild(frag);
+
+  summary.classList.remove("hidden");
+  summary.innerHTML = `
+    <div class="stat"><div class="k">Warenkorb (Bestpreis)</div><div class="v">${eur(basket)}</div></div>
+    <div class="stat save"><div class="k">Ersparnis ggü. Streichpreis</div><div class="v">${eur(saved)}</div></div>
+    <div class="stat"><div class="k">Angebote gefunden</div><div class="v">${found}/${state.favorites.length}</div></div>`;
+}
+
+// ---- DEMO results (seed data + location strategies) ----
+function renderDemoResults() {
   const wrap = $("#results");
   const summary = $("#summary");
   wrap.innerHTML = "";
@@ -245,6 +353,31 @@ function onLocation() {
   renderResults();
 }
 
+// Switch between real (kaufDA) and demo (seed) data modes.
+function setMode(mode) {
+  if (mode === "real" && !state.kaufda) mode = "demo";
+  state.mode = mode;
+  document.querySelectorAll("#modeToggle .mt").forEach((b) =>
+    b.classList.toggle("on", b.dataset.mode === mode));
+  // demo location panel only makes sense in demo mode
+  $("#locPanel").classList.toggle("hidden", mode === "real");
+  $("#realContext").classList.toggle("hidden", mode !== "real");
+  applyHeader();
+  renderResults();
+}
+
+function applyHeader() {
+  const badge = $("#weekBadge"), meta = $("#dataMeta");
+  if (state.mode === "real" && state.kaufda) {
+    const k = state.kaufda;
+    badge.textContent = `Echte Angebote · Berlin ${k.zip}`;
+    meta.textContent = `Datenquelle: kaufDA (${k.offerCount} Angebote, Berlin ${k.zip}) · Stand ${new Date(k.generatedAt).toLocaleString("de-DE")}.`;
+  } else {
+    badge.textContent = `Angebote gültig bis ${fmtDay(state.meta.validUntil)}`;
+    meta.textContent = `Beispieldaten (${state.meta.source}) · aktualisiert am ${new Date(state.meta.generatedAt).toLocaleString("de-DE")} · Angebotswoche ab ${fmtDay(state.meta.weekOf)}.`;
+  }
+}
+
 // ---- boot ----
 async function boot() {
   try {
@@ -266,10 +399,20 @@ async function boot() {
     return;
   }
 
-  const fmt = (d) => new Date(d).toLocaleDateString("de-DE", { day: "2-digit", month: "long" });
-  $("#weekBadge").textContent = `Angebote gültig bis ${fmt(state.meta.validUntil)}`;
-  $("#dataMeta").textContent =
-    `Datenquelle: ${state.meta.source} · aktualisiert am ${new Date(state.meta.generatedAt).toLocaleString("de-DE")} · Angebotswoche ab ${fmt(state.meta.weekOf)}.`;
+  // Real kaufDA data is optional — degrade to demo if it's not there.
+  try {
+    const k = await fetch("data/kaufda/10178/offers-latest.json").then((r) => r.json());
+    if (k && Array.isArray(k.offers) && k.offers.length) {
+      state.kaufda = k;
+      for (const o of k.offers) {
+        if (!state.termIndex.has(o.searchTerm)) state.termIndex.set(o.searchTerm, []);
+        state.termIndex.get(o.searchTerm).push(o);
+      }
+      const until = k.offers.map((o) => o.validUntil).filter(Boolean).sort().pop();
+      $("#realContext").innerHTML =
+        `<span class="live">Live</span> <b>Echte Angebote</b> aus kaufDA · <b>Berlin ${k.zip}</b> · ${k.offerCount} Angebote von ${new Set(k.offers.map((o) => o.retailer)).size} Händlern${until ? ` · gültig bis ${fmtShort(until)}` : ""}`;
+    }
+  } catch { /* no real data → demo mode */ }
 
   $("#search").addEventListener("input", renderCatalog);
   $("#locBtn").addEventListener("click", useLocation);
@@ -279,9 +422,11 @@ async function boot() {
     b.addEventListener("click", () => setLocation(+b.dataset.lat, +b.dataset.lng, b.dataset.label)));
   document.querySelectorAll('input[name="strat"]').forEach((r) =>
     r.addEventListener("change", (e) => { state.strategy = e.target.value; renderResults(); }));
+  document.querySelectorAll("#modeToggle .mt").forEach((b) =>
+    b.addEventListener("click", () => setMode(b.dataset.mode)));
 
   renderCatalog();
-  renderResults();
+  setMode(state.kaufda ? "real" : "demo");
 }
 
 boot();

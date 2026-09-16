@@ -27,17 +27,18 @@
     <!-- STEP 1: favorites -->
     <section class="panel">
       <div class="panel-head">
-        <h2>1 · Deine Lieblingsprodukte</h2>
+        <h2>Deine Lieblingsprodukte</h2>
         <span class="muted" id="favCount">0 ausgewählt</span>
       </div>
       <input id="search" class="search" type="search" placeholder="Produkt suchen … (z. B. Monster, Milch, Hähnchen)" autocomplete="off" />
       <div id="catalog" class="catalog-grid"></div>
     </section>
 
-    <!-- STEP 2: location + strategy -->
-    <section class="panel">
+    <!-- STEP 2: location + strategy (demo mode only) -->
+    <section class="panel" id="locPanel">
       <div class="panel-head">
-        <h2>2 · Standort &amp; Priorität</h2>
+        <h2>Standort &amp; Priorität</h2>
+        <span class="muted small">Demo-Modus</span>
       </div>
       <div class="loc-row">
         <input id="plzInput" class="plz" inputmode="numeric" maxlength="5" placeholder="PLZ (z. B. 80331)" autocomplete="postal-code" />
@@ -70,8 +71,13 @@
     <!-- STEP 3: results -->
     <section class="panel">
       <div class="panel-head">
-        <h2>3 · Beste Preise diese Woche</h2>
+        <h2>Beste Preise diese Woche</h2>
+        <div class="modetoggle" id="modeToggle" role="tablist">
+          <button type="button" data-mode="real" class="mt on">Echte Angebote</button>
+          <button type="button" data-mode="demo" class="mt">Demo</button>
+        </div>
       </div>
+      <div id="realContext" class="realctx hidden"></div>
       <div id="summary" class="summary hidden"></div>
       <div id="results" class="results"></div>
     </section>
