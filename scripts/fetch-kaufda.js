@@ -1,13 +1,12 @@
 #!/usr/bin/env node
 // CLI: pull REAL kaufDA offers for one location (default Berlin 10178) and save
-// them into the project folder. Structured-first (no OCR). Safe to schedule weekly.
+// them into the project folder. Enumerates the location's brochures, then reads
+// each brochure's structured offers via the content-viewer API (no OCR, no keyword
+// guessing). Safe to schedule weekly.
 //
 // Usage:
 //   node scripts/fetch-kaufda.js            # default location from config
 //   ZIP=10178 node scripts/fetch-kaufda.js  # pick a configured location
-//
-// Search terms come from our product catalog (data/catalog.json), plus a few
-// common grocery terms, so the pulled data covers the things the app compares.
 
 const fs = require("fs");
 const path = require("path");
@@ -15,24 +14,7 @@ const kaufda = require("./adapters/kaufda");
 
 const ROOT = path.join(__dirname, "..");
 const DATA = path.join(ROOT, "data");
-
 const locations = JSON.parse(fs.readFileSync(path.join(ROOT, "config/locations.json"), "utf8"));
-const catalog = JSON.parse(fs.readFileSync(path.join(DATA, "catalog.json"), "utf8"));
-
-// Extra broad terms so the dataset isn't limited to our 18 catalog items.
-const EXTRA_TERMS = ["Käse", "Wurst", "Joghurt", "Brot", "Chips", "Schokolade", "Wasser", "Waschmittel"];
-
-// term = product name without any parenthetical qualifier ("Pils (Kasten)" -> "Pils")
-function termFor(p) {
-  return (p.name.split("(")[0] || p.name).trim();
-}
-
-function buildTerms() {
-  const set = new Set();
-  for (const p of catalog.products) set.add(termFor(p));
-  for (const t of EXTRA_TERMS) set.add(t);
-  return [...set];
-}
 
 async function main() {
   const zip = process.env.ZIP || locations.default;
@@ -42,15 +24,13 @@ async function main() {
     process.exit(1);
   }
 
-  const terms = buildTerms();
-  console.log(`→ kaufDA: ${terms.length} search terms @ ${loc.zip} ${loc.city}`);
-
-  const result = await kaufda.fetchForTerms(loc, terms, {
-    delayMs: 700,
+  console.log(`→ kaufDA: enumerating brochures @ ${loc.zip} ${loc.city} …`);
+  const result = await kaufda.fetchForLocation(loc, {
+    delayMs: 500,
     onProgress: (p) =>
       p.error
-        ? console.warn(`   ✗ "${p.term}": ${p.error}`)
-        : console.log(`   · "${p.term}": ${p.returned} offers (of ${p.totalAvailable} available)`)
+        ? console.warn(`   ✗ ${p.retailer} · ${p.title}: ${p.error}`)
+        : console.log(`   · ${String(p.added).padStart(3)} new (${p.offers} in flyer) · ${p.retailer} · ${p.title}`)
   });
 
   const now = new Date();
@@ -58,40 +38,38 @@ async function main() {
   const outDir = path.join(DATA, "kaufda", loc.zip);
   fs.mkdirSync(outDir, { recursive: true });
 
-  // 1) Full-fidelity raw snapshot (offers as parsed from kaufDA + brochure metadata).
-  const rawFile = path.join(outDir, `raw-${date}.json`);
+  // 1) full-fidelity raw snapshot
   fs.writeFileSync(
-    rawFile,
+    path.join(outDir, `raw-${date}.json`),
     JSON.stringify(
       { generatedAt: now.toISOString(), source: "kaufda", location: loc,
-        brochures: result.brochures, offers: result.rawOffers, perTerm: result.perTerm },
+        brochures: result.brochures, perBrochure: result.perBrochure, offers: result.rawOffers },
       null, 2
     ) + "\n"
   );
 
-  // 2) Normalized offers for the app / search.
+  // 2) normalized offers for the app / DB
   const normFile = path.join(outDir, "offers-latest.json");
   fs.writeFileSync(
     normFile,
     JSON.stringify(
-      { generatedAt: now.toISOString(), source: "kaufda", zip: loc.zip, city: loc.city,
-        weekOf: date, offerCount: result.offers.length, offers: result.offers },
+      { generatedAt: now.toISOString(), source: "kaufda", method: "brochure-offers-api",
+        zip: loc.zip, city: loc.city, weekOf: date,
+        brochureCount: result.brochures.length, offerCount: result.offers.length, offers: result.offers },
       null, 2
     ) + "\n"
   );
 
   // summary
   const retailers = [...new Set(result.offers.map((o) => o.retailer).filter(Boolean))];
-  const withPrice = result.offers.filter((o) => typeof o.price === "number");
-  console.log(`\n✓ saved ${result.offers.length} unique offers`);
-  console.log(`  retailers (${retailers.length}): ${retailers.slice(0, 12).join(", ")}${retailers.length > 12 ? " …" : ""}`);
-  console.log(`  with numeric price: ${withPrice.length} · brochures: ${result.brochures.length}`);
+  const withPrice = result.offers.filter((o) => o.price != null);
+  console.log(`\n✓ ${result.offers.length} unique offers from ${result.brochures.length} brochures`);
+  console.log(`  retailers (${retailers.length}): ${retailers.slice(0, 14).join(", ")}${retailers.length > 14 ? " …" : ""}`);
+  console.log(`  with fixed price: ${withPrice.length} · bonus/discount-only (no price): ${result.offers.length - withPrice.length}`);
   console.log(`  → ${path.relative(ROOT, normFile)}`);
-  console.log(`  → ${path.relative(ROOT, rawFile)}`);
-  console.log("\n  sample:");
-  for (const o of withPrice.slice(0, 6)) {
-    console.log(`    ${o.productTitle} (${o.brand || "—"}) · ${o.retailer} · ${o.priceFormatted}${o.wasPrice ? ` (statt ${o.wasPrice}€)` : ""}`);
-  }
+  console.log("\n  cheapest 6:");
+  withPrice.sort((a, b) => a.price - b.price).slice(0, 6).forEach((o) =>
+    console.log(`    ${o.priceFormatted.padStart(8)} · ${o.retailer} · ${o.productTitle}`));
 }
 
 main().catch((e) => { console.error("fatal:", e); process.exit(1); });

@@ -1,16 +1,17 @@
-// kaufDA adapter — pulls REAL German supermarket offers from kaufda.de (Bonial),
-// scoped to a single location, using the structured data kaufDA server-renders
-// into its __NEXT_DATA__ blob. No OCR, no API keys, no headless browser.
+// kaufDA adapter — pulls REAL German supermarket offers from kaufda.de (Bonial).
 //
-// Strategy: for each product search term, call kaufDA's /search endpoint at the
-// given location and collect the structured offers it returns across all
-// retailers. This directly powers "which shop is cheapest for X this week near me".
+// Approach: enumerate the location's brochures (flyers), then for each brochure call
+// kaufDA's structured offers endpoint. This returns every offer in a flyer as clean
+// JSON — no OCR, no keyword guessing. It's the same data the flyer viewer's
+// "Angebote" tab shows.
 //
-// Legal/politeness: single postal code, low request volume, real User-Agent,
-// delay between requests, and we store only extracted facts + reference image
-// URLs (we never download/rehost the copyrighted brochure images). kaufDA/Bonial
-// terms restrict scraping — this is a personal/dev prototype; a public launch
-// would need a licensed feed.
+//   Brochure list  : SSR __NEXT_DATA__ on the homepage + grocery sector pages
+//   Offers per flyer: GET content-viewer-be.kaufda.de/v1/premiumPanel/offers
+//
+// Legal/politeness: single postal code, low request volume, real User-Agent, delay
+// between calls, and we store only extracted facts + reference image URLs (never
+// download/rehost the copyrighted flyer images). kaufDA/Bonial terms restrict
+// scraping — personal/dev prototype; a public launch needs a licensed feed.
 
 const { getNextData } = require("../lib/nextdata");
 
@@ -18,8 +19,20 @@ const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
   "(KHTML, like Gecko) Chrome/128.0 Safari/537.36";
 
+// Headers the offers backend requires (discovered from the viewer). Without the
+// Bonial-Api-Consumer header it returns 400; with Accept: application/json it returns 406.
+const API_HEADERS = {
+  "User-Agent": UA,
+  Accept: "*/*",
+  "Bonial-Api-Consumer": "web-content-viewer-fe",
+  delivery_channel: "dest.kaufda",
+  user_platform_category: "desktop.web.browser",
+  user_platform_os: "windows",
+  Origin: "https://www.kaufda.de",
+  Referer: "https://www.kaufda.de/"
+};
+
 // kaufDA publisherId -> our stores.json chain id (only the ones we model).
-// Anything not here keeps its raw publisherName and chainId=null.
 const CHAIN_BY_PUBLISHER_ID = {
   "DE-1062": "rewe",
   "DE-220164": "edeka",
@@ -32,143 +45,124 @@ const CHAIN_BY_PUBLISHER_ID = {
 };
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const cookie = (loc) => "location=" + encodeURIComponent(JSON.stringify(loc));
+const fmtEur = (n) => n.toLocaleString("de-DE", { style: "currency", currency: "EUR" });
 
-function locationCookie(loc) {
-  return "location=" + encodeURIComponent(JSON.stringify(loc));
-}
-
-function searchUrl(term, loc) {
-  const q = new URLSearchParams({
-    query: term,
-    lat: loc.lat,
-    lng: loc.lng,
-    city: loc.city,
-    zip: loc.zip
+async function ssr(url, loc) {
+  const r = await fetch(url, {
+    headers: { "User-Agent": UA, Cookie: cookie(loc), "Accept-Language": "de-DE,de;q=0.9" },
+    signal: AbortSignal.timeout(20000)
   });
-  return `https://www.kaufda.de/search?${q.toString()}`;
+  if (!r.ok) throw new Error(`HTTP ${r.status} for ${url}`);
+  return getNextData(await r.text());
 }
 
-async function getPage(url, loc, tries = 2) {
-  for (let attempt = 1; attempt <= tries; attempt++) {
+// Enumerate brochures (flyers) for the location: homepage top-ranked + grocery sectors.
+async function listBrochures(loc) {
+  const map = new Map();
+  const add = (b) => {
+    const id = b.contentId || b.id;
+    if (!id || map.has(id)) return;
+    map.set(id, {
+      contentId: id,
+      title: b.title || "",
+      retailer: b.publisher && b.publisher.name,
+      retailerId: b.publisher && b.publisher.id,
+      validFrom: b.validFrom || null,
+      validUntil: b.validUntil || null,
+      pageCount: b.pageCount || null
+    });
+  };
+  const home = await ssr("https://www.kaufda.de/", loc);
+  (home?.props?.pageProps?.pageInformation?.brochures?.topRanked || []).forEach(add);
+  for (const sector of ["Supermarkt", "Discounter"]) {
     try {
-      const res = await fetch(url, {
-        headers: {
-          "User-Agent": UA,
-          Cookie: locationCookie(loc),
-          "Accept-Language": "de-DE,de;q=0.9",
-          Accept: "text/html,application/xhtml+xml"
-        },
-        signal: AbortSignal.timeout(20000)
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return getNextData(await res.text());
-    } catch (err) {
-      if (attempt === tries) throw err;
-      await sleep(1000 * attempt);
-    }
+      const d = await ssr("https://www.kaufda.de/Branchen/" + sector, loc);
+      (d?.props?.pageProps?.pageInformation?.brochures?.sector || []).forEach(add);
+    } catch { /* sector optional */ }
   }
+  return [...map.values()];
 }
 
-// Map a raw kaufDA offer object to our normalized offer shape.
-function normalizeOffer(o, term, brochureValidity) {
-  const chainId = CHAIN_BY_PUBLISHER_ID[o.publisherId] || null;
-  const parent = o.parentContent || {};
-  const validity = brochureValidity.get(parent.id) || {};
-  const p = o.prices || {};
+// All offers in one brochure (paginated; the API caps a page at `size`).
+async function offersForBrochure(contentId, loc, { size = 200, maxPages = 6 } = {}) {
+  const all = [];
+  for (let page = 0; page < maxPages; page++) {
+    const url =
+      `https://content-viewer-be.kaufda.de/v1/premiumPanel/offers?brochureId=${contentId}` +
+      `&page=${page}&partner=kaufda_web&brochureKey=&lat=${loc.lat}&lng=${loc.lng}&size=${size}`;
+    const r = await fetch(url, { headers: API_HEADERS, signal: AbortSignal.timeout(20000) });
+    if (!r.ok) break;
+    const j = await r.json();
+    const contents = (j.contents || []).map((c) => c.content).filter(Boolean);
+    all.push(...contents);
+    if (contents.length < size) break; // last page
+    await sleep(250);
+  }
+  return all;
+}
+
+// Map one raw API offer to our normalized shape.
+function normalizeOffer(o, brochure) {
+  const p = (o.products && o.products[0]) || {};
+  const desc = Array.isArray(p.description) ? p.description.map((d) => d.paragraph).filter(Boolean).join(" ") : "";
+  const deals = o.deals || [];
+  const sale = deals.find((d) => d.type === "SALES_PRICE") || deals.find((d) => /PRICE/i.test(d.type || "")) || {};
+  const reg = deals.find((d) => d.type === "REGULAR_PRICE");
+  const price = typeof sale.max === "number" && sale.max > 0 ? sale.max : null; // 0 => bonus/discount only, no fixed price
+  const wasPrice = reg && typeof reg.max === "number" && reg.max > 0 ? reg.max : null;
+  const cats = p.categoryPaths || [];
+  const chainId = CHAIN_BY_PUBLISHER_ID[o.publisher && o.publisher.id] || null;
+  const title = p.name || "";
+  const category = cats.length ? cats[cats.length - 1].name : "";
   return {
     id: o.id,
-    searchTerm: term,
-    productTitle: o.title || "",
-    brand: o.brand || "",
-    description: o.description || "",
-    retailer: o.publisherName || "",
-    retailerId: o.publisherId || "",
+    brochureId: brochure.contentId,
+    page: o.parentContent && o.parentContent.page ? o.parentContent.page.number : null,
+    retailer: (o.publisher && o.publisher.name) || brochure.retailer || "",
+    retailerId: (o.publisher && o.publisher.id) || brochure.retailerId || "",
     chainId,
-    price: typeof p.mainPrice === "number" ? p.mainPrice : null,
-    priceFormatted: p.mainPriceFormatted || "",
-    wasPrice: typeof p.secondaryPrice === "number" && p.secondaryPrice > 0 ? p.secondaryPrice : null,
-    wasIsUVP: !!p.secondaryPriceIsUVP,
-    unitPrice: p.priceByBaseUnit || "",
-    validFrom: o.validFrom || validity.validFrom || null,
-    validUntil: o.validUntil || validity.validUntil || null,
-    brochureId: parent.id || null,
-    page: parent.page && parent.page.number != null ? parent.page.number : null,
-    category: Array.isArray(o.categories) ? o.categories[0] || "" : "",
-    imageUrl: o.offerImages && o.offerImages.url ? o.offerImages.url.normal : null
+    productTitle: title,
+    description: desc,
+    price,
+    priceFormatted: price != null ? fmtEur(price) : "",
+    wasPrice,
+    unitPrice: sale.priceByBaseUnit || "",
+    hasFixedPrice: price != null,
+    validFrom: brochure.validFrom,
+    validUntil: brochure.validUntil,
+    category,
+    imageUrl: (p.images && p.images[0] && p.images[0].url) || (o.image && o.image.url) || null,
+    // lower-cased haystack for the app's free-text / favorite matching
+    searchText: [title, desc, category, o.publisher && o.publisher.name].filter(Boolean).join(" ").toLowerCase()
   };
 }
 
-// Fetch the location's current brochures (publisher + validity + page image URLs).
-// Used both as OCR-fallback metadata and to backfill offer validity dates.
-async function fetchBrochures(loc) {
-  const d = await getPage("https://www.kaufda.de/", loc);
-  const list = d?.props?.pageProps?.pageInformation?.brochures?.topRanked || [];
-  return list.map((b) => ({
-    id: b.id,
-    contentId: b.contentId,
-    title: b.title,
-    retailer: b.publisher && b.publisher.name,
-    retailerId: b.publisher && b.publisher.id,
-    validFrom: b.validFrom || null,
-    validUntil: b.validUntil || null,
-    pageCount: b.pageCount,
-    pageImageUrls: Array.isArray(b.pages)
-      ? b.pages.map((pg) => pg.url && pg.url.large).filter(Boolean)
-      : []
-  }));
-}
+// Main entry: enumerate brochures for a location and pull every offer from each.
+async function fetchForLocation(loc, { delayMs = 500, onProgress } = {}) {
+  const brochures = await listBrochures(loc);
+  const byId = new Map();
+  const rawById = new Map();
+  const perBrochure = [];
 
-async function searchOffers(term, loc) {
-  const d = await getPage(searchUrl(term, loc), loc);
-  const sr = d?.props?.pageProps?.pageInformation?.searchResults || {};
-  const offers = (sr.contents && sr.contents.offers) || [];
-  const brochures = (sr.contents && sr.contents.brochures) || [];
-  const total = sr.metadata && sr.metadata.contentCount && sr.metadata.contentCount.offer;
-  return { offers, brochures, total: total ?? offers.length };
-}
-
-// Main entry: fetch offers for a list of search terms at one location.
-// Returns { location, brochures, offers[] (normalized, de-duped by offer id) }.
-async function fetchForTerms(loc, terms, { delayMs = 700, onProgress } = {}) {
-  const brochures = await fetchBrochures(loc);
-  const brochureValidity = new Map(
-    brochures.map((b) => [b.id, { validFrom: b.validFrom, validUntil: b.validUntil }])
-  );
-
-  const rawById = new Map();   // offer id -> { raw, term }
-  const perTerm = [];
-  for (const term of terms) {
+  for (const b of brochures) {
     await sleep(delayMs);
-    let got = 0, total = 0;
     try {
-      const res = await searchOffers(term, loc);
-      total = res.total;
-      // harvest brochure validity so we can backfill offer dates later.
-      // search-result brochures are wrapped: the brochure is under `.content`.
-      for (const wrap of res.brochures) {
-        const b = (wrap && wrap.content) || wrap;
-        if (b && b.id && !brochureValidity.has(b.id)) {
-          brochureValidity.set(b.id, { validFrom: b.validFrom || null, validUntil: b.validUntil || null });
-        }
+      const raw = await offersForBrochure(b.contentId, loc);
+      let added = 0;
+      for (const o of raw) {
+        if (!o || !o.id) continue;
+        if (!byId.has(o.id)) { byId.set(o.id, normalizeOffer(o, b)); rawById.set(o.id, o); added++; }
       }
-      for (const raw of res.offers) {
-        if (!raw || !raw.id) continue;
-        got++;
-        if (!rawById.has(raw.id)) rawById.set(raw.id, { raw, term });
-      }
+      perBrochure.push({ retailer: b.retailer, title: b.title, contentId: b.contentId, offers: raw.length, added });
+      if (onProgress) onProgress({ retailer: b.retailer, title: b.title, offers: raw.length, added });
     } catch (err) {
-      perTerm.push({ term, error: err.message });
-      if (onProgress) onProgress({ term, error: err.message });
-      continue;
+      perBrochure.push({ retailer: b.retailer, title: b.title, contentId: b.contentId, error: err.message });
+      if (onProgress) onProgress({ retailer: b.retailer, title: b.title, error: err.message });
     }
-    perTerm.push({ term, returned: got, totalAvailable: total });
-    if (onProgress) onProgress({ term, returned: got, totalAvailable: total });
   }
 
-  // normalize once the brochure-validity map is complete
-  const offers = [...rawById.values()].map(({ raw, term }) => normalizeOffer(raw, term, brochureValidity));
-  const rawOffers = [...rawById.values()].map((x) => x.raw);
-  return { location: loc, brochures, offers, rawOffers, perTerm };
+  return { location: loc, brochures, offers: [...byId.values()], rawOffers: [...rawById.values()], perBrochure };
 }
 
-module.exports = { name: "kaufda", fetchForTerms, searchOffers, fetchBrochures, normalizeOffer, CHAIN_BY_PUBLISHER_ID };
+module.exports = { name: "kaufda", fetchForLocation, listBrochures, offersForBrochure, normalizeOffer, CHAIN_BY_PUBLISHER_ID };

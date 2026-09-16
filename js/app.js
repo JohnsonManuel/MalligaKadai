@@ -14,8 +14,7 @@ const state = {
   strategy: "cheapest",
   // real data (kaufDA)
   mode: "real",           // "real" | "demo"
-  kaufda: null,           // loaded offers-latest.json
-  termIndex: new Map()    // searchTerm -> [offers]
+  kaufda: null            // loaded offers-latest.json (brochure-based offers)
 };
 
 const $ = (s) => document.querySelector(s);
@@ -38,6 +37,17 @@ function retailerVisual(o) {
 }
 const chipHTML = (v) => `<span class="chip"><span class="dot" style="background:${v.color}">${v.initials}</span>${v.name}</span>`;
 const esc = (s) => (s || "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+// Match a favorite (catalog product) to kaufDA offers by keyword over the offer haystack.
+function matchFavorite(term) {
+  if (!state.kaufda) return [];
+  const t = term.toLowerCase();
+  const words = t.split(/[\s\-]+/).filter((w) => w.length >= 4);
+  const primary = words.sort((a, b) => b.length - a.length)[0] || t;
+  return state.kaufda.offers.filter((o) =>
+    typeof o.price === "number" && o.price > 0 &&
+    ((o.searchText || "").includes(t) || (o.searchText || "").includes(primary)));
+}
 
 function loadFavorites() {
   try { return JSON.parse(localStorage.getItem("sf_favorites") || "[]"); }
@@ -140,18 +150,13 @@ function renderOfferSearch(q) {
   const ql = q.toLowerCase();
 
   const matches = state.kaufda.offers
-    .filter((o) => typeof o.price === "number" && o.price > 0 &&
-      [o.productTitle, o.brand, o.description, o.searchTerm, o.retailer, o.category]
-        .some((f) => (f || "").toLowerCase().includes(ql)))
+    .filter((o) => typeof o.price === "number" && o.price > 0 && (o.searchText || "").includes(ql))
     .sort((a, b) => a.price - b.price);
 
   if (!matches.length) {
     summary.classList.add("hidden");
-    const terms = [...state.termIndex.keys()].sort().join(", ");
     wrap.innerHTML =
-      `<div class="empty">Keine geladenen Angebote für „${esc(q)}“.<br>
-      <span class="small">Geladen sind derzeit nur diese Suchbegriffe (Berlin&nbsp;10178): ${esc(terms)}.
-      Für beliebige Produkte bräuchte es einen Live-Abruf.</span></div>`;
+      `<div class="empty">Keine Angebote für „${esc(q)}“ in Berlin&nbsp;10178 diese Woche.</div>`;
     return;
   }
 
@@ -194,9 +199,7 @@ function renderRealResults() {
 
   for (const pid of state.favorites) {
     const p = product(pid);
-    const offers = (state.termIndex.get(termFor(p)) || [])
-      .filter((o) => typeof o.price === "number" && o.price > 0)
-      .sort((a, b) => a.price - b.price);
+    const offers = matchFavorite(termFor(p)).sort((a, b) => a.price - b.price);
 
     const card = document.createElement("div");
     card.className = "rescard";
@@ -455,13 +458,10 @@ async function boot() {
     const k = await fetch("data/kaufda/10178/offers-latest.json").then((r) => r.json());
     if (k && Array.isArray(k.offers) && k.offers.length) {
       state.kaufda = k;
-      for (const o of k.offers) {
-        if (!state.termIndex.has(o.searchTerm)) state.termIndex.set(o.searchTerm, []);
-        state.termIndex.get(o.searchTerm).push(o);
-      }
+      const retailers = new Set(k.offers.map((o) => o.retailer).filter(Boolean)).size;
       const until = k.offers.map((o) => o.validUntil).filter(Boolean).sort().pop();
       $("#realContext").innerHTML =
-        `<span class="live">Live</span> <b>Echte Angebote</b> aus kaufDA · <b>Berlin ${k.zip}</b> · ${k.offerCount} Angebote von ${new Set(k.offers.map((o) => o.retailer)).size} Händlern${until ? ` · gültig bis ${fmtShort(until)}` : ""}`;
+        `<span class="live">Live</span> <b>Echte Angebote</b> aus kaufDA · <b>Berlin ${k.zip}</b> · ${k.offerCount} Angebote aus ${k.brochureCount || "?"} Prospekten von ${retailers} Händlern${until ? ` · gültig bis ${fmtShort(until)}` : ""}`;
     }
   } catch { /* no real data → demo mode */ }
 

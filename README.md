@@ -63,42 +63,48 @@ SOURCE=marktguru node scripts/fetch-offers.js  # once you implement + review ToS
 ## Real data: the kaufDA pipeline (Berlin 10178)
 
 A working real-data source is wired up, scoped to **one postal code, Berlin 10178**, pulling
-live weekly offers from **kaufDA.de** (Bonial). It is **structured-first** — kaufDA server-renders
-fully structured offers into its page (`__NEXT_DATA__`), so a plain HTTP fetch + JSON parse gets
-`title, brand, retailer, price, was-price, unit price, brochure + page, image URL` with **no OCR**.
+live weekly offers from **kaufDA.de** (Bonial), with **no OCR**. Two steps:
+
+1. **Enumerate the location's brochures** (flyers) from the server-rendered `__NEXT_DATA__` on the
+   homepage + grocery sector pages (`/Branchen/Supermarkt`, `/Branchen/Discounter`).
+2. **Read each brochure's structured offers** from kaufDA's content-viewer API — the same data the
+   flyer viewer's "Angebote" tab shows:
+   `GET content-viewer-be.kaufda.de/v1/premiumPanel/offers?brochureId=<id>&page=0&size=200` (paginated).
+   Required headers: `Bonial-Api-Consumer: web-content-viewer-fe` and `Accept: */*`.
 
 ```bash
 node scripts/fetch-kaufda.js            # default location (10178) from config/locations.json
 ZIP=10178 node scripts/fetch-kaufda.js  # explicit
 ```
 
-It searches kaufDA at the location for each product in `data/catalog.json` (plus a few broad grocery
-terms) and writes into the project folder:
+Writes into the project folder:
 
-- `data/kaufda/10178/offers-latest.json` — normalized offers the app/DB can use (tracked in git).
+- `data/kaufda/10178/offers-latest.json` — normalized offers the app/DB use (tracked in git).
 - `data/kaufda/10178/raw-<date>.json` — full-fidelity raw snapshot + brochure metadata (gitignored).
 
-Typical run: **~400 unique offers across ~18 retailers** (REWE, EDEKA, Lidl, ALDI Nord, Penny,
-Netto, Kaufland, Rossmann, …), most with a valid-until date and a was-price.
+Typical run: **~3,800 unique offers from ~22 brochures across ~10 retailers** (REWE, EDEKA, Lidl,
+ALDI Nord, Penny, Netto, Kaufland, budni, E center, Thomas Philipps) — essentially the location's
+complete weekly-offer set. Each offer: retailer, product title, description, price, unit price,
+brochure + page, validity, category, image URL.
 
-**Files:** `scripts/adapters/kaufda.js` (fetch + normalize), `scripts/lib/nextdata.js` (SSR parse),
-`scripts/fetch-kaufda.js` (CLI), `config/locations.json` (add more zips here).
+> Why not OCR? We verified both: OCR of the 18-page REWE flyer and this API returned **the same
+> offers** (115/115 priced offers matched to the cent). The API is exact, complete and ~free, so
+> OCR is only a fallback for image-only flyers.
+
+**Files:** `scripts/adapters/kaufda.js` (enumerate + fetch + normalize), `scripts/lib/nextdata.js`
+(SSR parse), `scripts/fetch-kaufda.js` (CLI), `config/locations.json` (add more zips here).
 
 **Legal / politeness (important):** kaufDA/Bonial terms restrict scraping, and brochure **images**
 are the retailers' copyrighted material. This pipeline is a **personal/dev prototype**: one postal
 code, weekly cadence, low request volume, a real User-Agent, and it stores **only extracted facts +
 references image URLs (never downloads/rehosts images)**. A public launch would need a licensed feed.
 
-**Known limits (next steps):** per-term search returns up to 24 offers (broad terms like "Käse" have
-more available — see `perTerm` in the raw file); wiring these offers into the frontend, matching them
-to the catalog, and the Postgres load are the follow-ups.
-
 ## Roadmap
 
-- [x] Real data source (kaufDA, Berlin 10178) — structured-first, saved to `data/kaufda/`
-- [ ] Surface kaufDA offers in the frontend + match to the catalog
+- [x] Real data source (kaufDA, Berlin 10178) — brochure-offers API, ~3,800 offers, saved to `data/kaufda/`
+- [x] Surface kaufDA offers in the frontend (real/demo toggle + free-text search)
 - [ ] Load offers into Postgres with full-text search; schedule weekly
-- [ ] Expand beyond 10178 / paginate broad search terms
+- [ ] Expand beyond 10178 (add zips to `config/locations.json`)
 - [ ] Weekly notification when favorites hit their cheapest (channel TBD — email is simplest)
 - [ ] Real store-locator data per chain (current branches are a Munich/Berlin sample)
 - [ ] Postal-code entry as a fallback to GPS
