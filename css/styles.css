@@ -68,6 +68,10 @@ body {
 .btn { border: 1px solid var(--primary); background: var(--primary); color: #fff; font-weight: 650; font-size: 14px; padding: 9px 14px; border-radius: 10px; cursor: pointer; }
 .btn:hover { background: var(--primary-ink); border-color: var(--primary-ink); }
 .btn.ghost { background: transparent; color: var(--primary); }
+.btn.city { padding: 6px 12px; font-size: 13px; }
+.plz { width: 170px; padding: 9px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); color: var(--ink); font-size: 15px; }
+.plz:focus { outline: 2px solid var(--primary); outline-offset: 1px; }
+.coverage { font-size: 12px; color: var(--primary-ink); background: color-mix(in srgb, var(--primary) 10%, var(--surface)); border-radius: 8px; padding: 6px 10px; margin-top: 4px; }
 .strategy { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
 .strat-opt { display: flex; gap: 8px; align-items: flex-start; border: 1.5px solid var(--line); border-radius: 12px; padding: 10px 12px; cursor: pointer; }
 .strat-opt input { margin-top: 3px; accent-color: var(--primary); }

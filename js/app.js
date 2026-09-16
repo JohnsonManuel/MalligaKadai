@@ -9,6 +9,7 @@ const state = {
   meta: null,
   favorites: loadFavorites(),
   userLoc: null,          // {lat,lng}
+  locLabel: null,         // human-readable location label
   nearestChainIds: [],    // 3 nearest chains (by closest branch)
   strategy: "cheapest"
 };
@@ -182,15 +183,35 @@ function renderResults() {
 function useLocation() {
   const status = $("#locStatus");
   if (!navigator.geolocation) { status.textContent = "Standort wird vom Browser nicht unterstützt."; return; }
-  status.textContent = "Standort wird ermittelt …";
+  status.textContent = "GPS-Standort wird ermittelt …";
   navigator.geolocation.getCurrentPosition(
-    (pos) => {
-      state.userLoc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-      onLocation();
-    },
-    (err) => { status.textContent = "Standort nicht verfügbar (" + err.message + "). Es gilt der bundesweite Bestpreis."; },
+    (pos) => setLocation(pos.coords.latitude, pos.coords.longitude, "GPS-Standort"),
+    (err) => { status.textContent = "Standort nicht verfügbar (" + err.message + "). Nutze die PLZ-Eingabe."; },
     { enableHighAccuracy: false, timeout: 8000 }
   );
+}
+
+// Look up a German postal code -> coordinates (free, CORS-enabled).
+async function usePlz() {
+  const status = $("#locStatus");
+  const plz = ($("#plzInput").value || "").trim();
+  if (!/^\d{5}$/.test(plz)) { status.textContent = "Bitte eine 5-stellige Postleitzahl eingeben."; return; }
+  status.textContent = `PLZ ${plz} wird gesucht …`;
+  try {
+    const r = await fetch(`https://api.zippopotam.us/de/${plz}`);
+    if (!r.ok) throw new Error("nicht gefunden");
+    const d = await r.json();
+    const p = d.places[0];
+    setLocation(+p.latitude, +p.longitude, `${plz} ${p["place name"]}`);
+  } catch {
+    status.textContent = `PLZ ${plz} nicht gefunden. Bitte prüfen oder eine Schnellauswahl nutzen.`;
+  }
+}
+
+function setLocation(lat, lng, label) {
+  state.userLoc = { lat, lng };
+  state.locLabel = label;
+  onLocation();
 }
 
 function onLocation() {
@@ -203,15 +224,23 @@ function onLocation() {
   }
   state.nearestChainIds = nearChains.map((b) => b.chainId);
 
-  $("#locStatus").textContent = "Standort erkannt. Wähle eine Priorität.";
+  $("#locStatus").textContent = `Standort: ${state.locLabel || "erkannt"}. Wähle eine Priorität.`;
   document.querySelectorAll('.strat-opt[data-lock] input').forEach((i) => (i.disabled = false));
   document.querySelectorAll(".strat-opt.is-locked").forEach((el) => el.classList.remove("is-locked"));
 
+  const fmtDist = (km) => (km < 1 ? Math.round(km * 1000) + " m" : km.toFixed(1) + " km");
   const near = $("#nearby");
   near.classList.remove("hidden");
-  near.innerHTML = `<h3>Deine nächsten Märkte</h3>` + nearChains.map((b) =>
+  let html = `<h3>Deine nächsten Märkte</h3>` + nearChains.map((b) =>
     `<div class="branch">${chip(b.chainId)}<span class="muted">${b.name}</span>
-     <span class="dist">${b.dist < 1 ? Math.round(b.dist * 1000) + " m" : b.dist.toFixed(1) + " km"}</span></div>`).join("");
+     <span class="dist">${fmtDist(b.dist)}</span></div>`).join("");
+  // Sample store data currently only covers München + Berlin — be honest if far.
+  if (nearChains[0] && nearChains[0].dist > 40) {
+    html += `<div class="coverage">ℹ️ Aktuell sind nur Beispiel-Märkte in München &amp; Berlin hinterlegt
+      (nächster ist ${fmtDist(nearChains[0].dist)} entfernt). Die Standort-Prioritäten funktionieren,
+      aber echte Filialdaten für deine Region folgen.</div>`;
+  }
+  near.innerHTML = html;
 
   renderResults();
 }
@@ -244,6 +273,10 @@ async function boot() {
 
   $("#search").addEventListener("input", renderCatalog);
   $("#locBtn").addEventListener("click", useLocation);
+  $("#plzBtn").addEventListener("click", usePlz);
+  $("#plzInput").addEventListener("keydown", (e) => { if (e.key === "Enter") usePlz(); });
+  document.querySelectorAll(".city").forEach((b) =>
+    b.addEventListener("click", () => setLocation(+b.dataset.lat, +b.dataset.lng, b.dataset.label)));
   document.querySelectorAll('input[name="strat"]').forEach((r) =>
     r.addEventListener("change", (e) => { state.strategy = e.target.value; renderResults(); }));
 
