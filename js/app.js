@@ -126,7 +126,55 @@ function chip(chainId) {
 }
 
 function renderResults() {
-  return state.mode === "real" && state.kaufda ? renderRealResults() : renderDemoResults();
+  if (state.mode === "real" && state.kaufda) {
+    const q = ($("#search").value || "").trim();
+    return q.length >= 2 ? renderOfferSearch(q) : renderRealResults();
+  }
+  return renderDemoResults();
+}
+
+// Free-text search over the loaded kaufDA offers (any product in the pulled set).
+function renderOfferSearch(q) {
+  const wrap = $("#results");
+  const summary = $("#summary");
+  const ql = q.toLowerCase();
+
+  const matches = state.kaufda.offers
+    .filter((o) => typeof o.price === "number" && o.price > 0 &&
+      [o.productTitle, o.brand, o.description, o.searchTerm, o.retailer, o.category]
+        .some((f) => (f || "").toLowerCase().includes(ql)))
+    .sort((a, b) => a.price - b.price);
+
+  if (!matches.length) {
+    summary.classList.add("hidden");
+    const terms = [...state.termIndex.keys()].sort().join(", ");
+    wrap.innerHTML =
+      `<div class="empty">Keine geladenen Angebote für „${esc(q)}“.<br>
+      <span class="small">Geladen sind derzeit nur diese Suchbegriffe (Berlin&nbsp;10178): ${esc(terms)}.
+      Für beliebige Produkte bräuchte es einen Live-Abruf.</span></div>`;
+    return;
+  }
+
+  const capped = matches.slice(0, 80);
+  const rows = capped.map((o, i) => {
+    const v = retailerVisual(o);
+    const label = `${o.brand ? `<b>${esc(o.brand)}</b> ` : ""}${esc(o.productTitle)}${o.unitPrice ? ` · ${esc(o.unitPrice)}` : ""}`;
+    const price = `${esc(o.priceFormatted) || eur(o.price)}${o.wasPrice ? ` <s>${eur(o.wasPrice)}</s>` : ""}`;
+    return `<div class="orow ${i === 0 ? "win" : ""}">${chipHTML(v)}<span class="oname">${label}</span><span class="oprice">${price}</span></div>`;
+  }).join("");
+
+  wrap.innerHTML =
+    `<div class="rescard">
+      <div class="srhead">${matches.length} Angebot${matches.length === 1 ? "" : "e"} für „${esc(q)}“ · Berlin&nbsp;10178${matches.length > capped.length ? ` <span class="muted small">(zeige günstigste ${capped.length})</span>` : ""}</div>
+      <div class="allprices rows" style="display:block">${rows}</div>
+    </div>`;
+
+  const retailers = new Set(matches.map((o) => o.retailer)).size;
+  summary.classList.remove("hidden");
+  summary.innerHTML = `
+    <div class="stat"><div class="k">Treffer</div><div class="v">${matches.length}</div></div>
+    <div class="stat save"><div class="k">Günstigster Preis</div><div class="v">${eur(matches[0].price)}</div></div>
+    <div class="stat"><div class="k">Händler</div><div class="v">${retailers}</div></div>`;
 }
 
 // ---- REAL results (kaufDA offers for Berlin 10178) ----
@@ -362,6 +410,9 @@ function setMode(mode) {
   // demo location panel only makes sense in demo mode
   $("#locPanel").classList.toggle("hidden", mode === "real");
   $("#realContext").classList.toggle("hidden", mode !== "real");
+  $("#search").placeholder = mode === "real"
+    ? "Angebote durchsuchen … (z. B. Joghurt, Barilla, Käse) oder Favoriten wählen"
+    : "Produkt suchen … (z. B. Monster, Milch, Hähnchen)";
   applyHeader();
   renderResults();
 }
@@ -414,7 +465,7 @@ async function boot() {
     }
   } catch { /* no real data → demo mode */ }
 
-  $("#search").addEventListener("input", renderCatalog);
+  $("#search").addEventListener("input", () => { renderCatalog(); renderResults(); });
   $("#locBtn").addEventListener("click", useLocation);
   $("#plzBtn").addEventListener("click", usePlz);
   $("#plzInput").addEventListener("keydown", (e) => { if (e.key === "Enter") usePlz(); });

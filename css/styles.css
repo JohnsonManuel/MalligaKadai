@@ -128,6 +128,8 @@ body {
 .pline.win { font-weight: 700; }
 .rescard .valid { font-size: 11px; color: var(--muted); margin-top: 2px; }
 
+.srhead { font-size: 13.5px; font-weight: 700; margin-bottom: 8px; }
+
 /* real-offer rows (kaufDA): retailer · product · price */
 .allprices.rows { display: block; }
 .orow { display: grid; grid-template-columns: minmax(96px,auto) 1fr auto; align-items: center; gap: 8px 12px; padding: 6px 0; border-bottom: 1px dashed var(--line); font-size: 12.5px; }
