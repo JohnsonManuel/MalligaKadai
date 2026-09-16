@@ -1,6 +1,12 @@
 node_modules/
 *.log
 
+# secrets — never commit DB credentials
+.env
+.env.*
+config/database.local.json
+*.local.json
+
 # kaufDA raw snapshots: large (~1 MB/run) and regenerable; keep offers-latest.json tracked.
 data/kaufda/**/raw-*.json
 .DS_Store

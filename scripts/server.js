@@ -14,6 +14,7 @@ const http = require("http");
 const fs = require("fs");
 const path = require("path");
 const { spawn } = require("child_process");
+const db = require("./lib/db");
 
 const ROOT = path.join(__dirname, "..");
 const PORT = process.env.PORT || 4173;
@@ -26,19 +27,16 @@ const TYPES = { ".html": "text/html; charset=utf-8", ".css": "text/css; charset=
 // ---- extraction job state (single job at a time) ----
 let job = { running: false, zip: null, log: "", startedAt: null, finishedAt: null, ok: null };
 
-function offersPath(zip) { return path.join(ROOT, "data", "kaufda", zip, "offers-latest.json"); }
-
-// Is the current week's data ready? (offers exist and are still valid today)
-function dataStatus(zip) {
-  try {
-    const d = JSON.parse(fs.readFileSync(offersPath(zip), "utf8"));
-    const today = new Date().toISOString().slice(0, 10);
-    const validUntil = (d.offers || []).map((o) => o.validUntil).filter(Boolean).sort().pop() || null;
-    const ready = !!validUntil && validUntil.slice(0, 10) >= today;
-    return { exists: true, ready, weekOf: d.weekOf, generatedAt: d.generatedAt, validUntil,
-      offerCount: d.offerCount, brochureCount: d.brochureCount,
-      retailers: [...new Set((d.offers || []).map((o) => o.retailer).filter(Boolean))].length };
-  } catch { return { exists: false, ready: false }; }
+// Fallback to the on-disk JSON batch when the DB is unconfigured/unreachable.
+function fileBatch(zip) {
+  try { return JSON.parse(fs.readFileSync(path.join(ROOT, "data", "kaufda", zip, "offers-latest.json"), "utf8")); }
+  catch { return null; }
+}
+function readyOf(offers) {
+  const today = new Date().toISOString().slice(0, 10);
+  const until = (offers || []).map((o) => o.validUntil).filter(Boolean)
+    .map((d) => new Date(d).toISOString().slice(0, 10)).sort().pop() || null;
+  return { ready: !!until && until >= today, validUntil: until };
 }
 
 function runExtract(zip) {
@@ -68,35 +66,62 @@ function serveStatic(req, res) {
   });
 }
 
-http.createServer((req, res) => {
+http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://localhost:${PORT}`);
   const p = url.pathname;
 
-  if (p === "/api/status") {
-    const zip = url.searchParams.get("zip") || locations.default;
-    return sendJson(res, 200, { zip, known: !!locations.locations[zip], locations: Object.keys(locations.locations),
-      data: dataStatus(zip), job: { running: job.running, zip: job.zip, ok: job.ok, startedAt: job.startedAt, finishedAt: job.finishedAt } });
-  }
+  try {
+    // admin: readiness (from the DB, falling back to the JSON file) + current job state
+    if (p === "/api/status") {
+      const zip = url.searchParams.get("zip") || locations.default;
+      let data, dbError = null;
+      try {
+        data = await db.status(zip);
+        if (!data.exists) throw new Error("no DB batch");   // fall back to file
+      } catch (e) {
+        dbError = db.isConfigured() ? e.message : null;
+        const f = fileBatch(zip);
+        data = f ? { configured: db.isConfigured(), source: "file", exists: true, ...readyOf(f.offers),
+          weekOf: f.weekOf, generatedAt: f.generatedAt, offerCount: f.offerCount, brochureCount: f.brochureCount,
+          retailers: new Set((f.offers || []).map((o) => o.retailer).filter(Boolean)).size }
+          : { configured: db.isConfigured(), exists: false, ready: false };
+      }
+      return sendJson(res, 200, { zip, known: !!locations.locations[zip], locations: Object.keys(locations.locations),
+        data, dbError, job: { running: job.running, zip: job.zip, ok: job.ok, startedAt: job.startedAt, finishedAt: job.finishedAt } });
+    }
 
-  if (p === "/api/extract/log") {
-    return sendJson(res, 200, { running: job.running, zip: job.zip, ok: job.ok, startedAt: job.startedAt, finishedAt: job.finishedAt, log: job.log });
-  }
+    // user app: the latest offer batch — from the DB, falling back to the JSON file
+    if (p === "/api/offers") {
+      const zip = url.searchParams.get("zip") || locations.default;
+      let batch = null, source = "db";
+      if (db.isConfigured()) { try { const b = await db.latestOffers(zip); if (b && b.offers.length) batch = b; } catch {} }
+      if (!batch) { const f = fileBatch(zip); if (f) { batch = f; source = "file"; } }
+      if (!batch) return sendJson(res, 200, { zip, ready: false, configured: db.isConfigured(), offers: [] });
+      return sendJson(res, 200, { ...batch, source, configured: db.isConfigured(), ...readyOf(batch.offers) });
+    }
 
-  if (p === "/api/extract" && req.method === "POST") {
-    let body = "";
-    req.on("data", (c) => (body += c));
-    req.on("end", () => {
-      let zip = url.searchParams.get("zip");
-      try { if (!zip && body) zip = JSON.parse(body).zip; } catch {}
-      zip = zip || locations.default;
-      if (!locations.locations[zip]) return sendJson(res, 400, { error: `unknown zip "${zip}"` });
-      if (job.running) return sendJson(res, 409, { error: "extraction already running", zip: job.zip });
-      runExtract(zip);
-      return sendJson(res, 202, { started: true, zip });
-    });
-    return;
-  }
+    if (p === "/api/extract/log") {
+      return sendJson(res, 200, { running: job.running, zip: job.zip, ok: job.ok, startedAt: job.startedAt, finishedAt: job.finishedAt, log: job.log });
+    }
 
-  if (p.startsWith("/api/")) return sendJson(res, 404, { error: "not found" });
-  return serveStatic(req, res);
+    if (p === "/api/extract" && req.method === "POST") {
+      let body = "";
+      req.on("data", (c) => (body += c));
+      req.on("end", () => {
+        let zip = url.searchParams.get("zip");
+        try { if (!zip && body) zip = JSON.parse(body).zip; } catch {}
+        zip = zip || locations.default;
+        if (!locations.locations[zip]) return sendJson(res, 400, { error: `unknown zip "${zip}"` });
+        if (job.running) return sendJson(res, 409, { error: "extraction already running", zip: job.zip });
+        runExtract(zip);
+        return sendJson(res, 202, { started: true, zip });
+      });
+      return;
+    }
+
+    if (p.startsWith("/api/")) return sendJson(res, 404, { error: "not found" });
+    return serveStatic(req, res);
+  } catch (e) {
+    return sendJson(res, 500, { error: e.message });
+  }
 }).listen(PORT, "127.0.0.1", () => console.log(`SparFuchs → http://localhost:${PORT}  (admin: http://localhost:${PORT}/admin)`));

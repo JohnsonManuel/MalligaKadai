@@ -210,8 +210,9 @@ async function boot() {
   } catch {}
 
   try {
-    const k = await fetch("data/kaufda/10178/offers-latest.json", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null));
-    if (k && Array.isArray(k.offers)) state.kaufda = k;
+    // read the latest offer batch from the DB (via the server; credential stays server-side)
+    const k = await fetch("/api/offers?zip=10178", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null));
+    if (k && Array.isArray(k.offers) && k.offers.length) state.kaufda = k;
   } catch {}
 
   state.ready = computeReady();

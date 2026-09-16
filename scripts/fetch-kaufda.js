@@ -11,6 +11,7 @@
 const fs = require("fs");
 const path = require("path");
 const kaufda = require("./adapters/kaufda");
+const db = require("./lib/db");
 
 const ROOT = path.join(__dirname, "..");
 const DATA = path.join(ROOT, "data");
@@ -59,6 +60,23 @@ async function main() {
       null, 2
     ) + "\n"
   );
+
+  // 3) load the batch into Postgres (append-only) when configured
+  if (db.isConfigured()) {
+    try {
+      const r = await db.saveExtraction(
+        { zip: loc.zip, city: loc.city, weekOf: date, brochureCount: result.brochures.length, source: "kaufda" },
+        result.offers
+      );
+      console.log(`\n✓ DB: saved batch #${r.extractionId} (${r.inserted} offers) to Postgres`);
+    } catch (e) {
+      console.error(`\n✗ DB load failed: ${e.message}`);
+    } finally {
+      try { const p = db.getPool(); if (p) await p.end(); } catch {}
+    }
+  } else {
+    console.log("\n(DB not configured — set config/database.local.json or DATABASE_URL to also load Postgres)");
+  }
 
   // summary
   const retailers = [...new Set(result.offers.map((o) => o.retailer).filter(Boolean))];

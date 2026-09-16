@@ -55,6 +55,7 @@
 
   <script>
     const $ = (s) => document.querySelector(s);
+    const esc = (s) => (s || "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
     let pollTimer = null;
 
     function fmt(d) { try { return new Date(d).toLocaleString("de-DE"); } catch { return "—"; } }
@@ -73,13 +74,16 @@
       else if (d.ready) badge.innerHTML = `<span class="badge-big badge-ready">✓ Woche bereit</span>`;
       else badge.innerHTML = `<span class="badge-big badge-stale">⚠ Veraltet / nicht bereit</span>`;
 
-      $("#kv").innerHTML = d.exists ? `
+      const dbLine = r.dbError
+        ? `<dt>Datenbank</dt><dd style="color:var(--primary-ink)">⚠ nicht erreichbar — ${esc(r.dbError)}</dd>`
+        : `<dt>Datenbank</dt><dd>${d.source === "db" ? "✓ Postgres verbunden" : "— (Datei-Fallback aktiv)"}</dd>`;
+      $("#kv").innerHTML = (d.exists ? `
         <dt>Bereit für diese Woche</dt><dd>${d.ready ? "Ja" : "Nein — bitte neu extrahieren"}</dd>
         <dt>Angebote</dt><dd>${d.offerCount ?? "—"}</dd>
         <dt>Prospekte / Händler</dt><dd>${d.brochureCount ?? "—"} / ${d.retailers ?? "—"}</dd>
-        <dt>Gültig bis</dt><dd>${d.validUntil ? d.validUntil.slice(0,10) : "—"}</dd>
+        <dt>Gültig bis</dt><dd>${d.validUntil ? String(d.validUntil).slice(0,10) : "—"}</dd>
         <dt>Zuletzt erzeugt</dt><dd>${fmt(d.generatedAt)}</dd>`
-        : `<dt>Status</dt><dd>Für diese Region wurden noch keine Daten extrahiert.</dd>`;
+        : `<dt>Status</dt><dd>Für diese Region wurden noch keine Daten extrahiert.</dd>`) + dbLine;
 
       // reflect running job
       const running = r.job.running;

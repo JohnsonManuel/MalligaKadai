@@ -7,5 +7,8 @@
     "fetch": "node scripts/fetch-kaufda.js",
     "serve": "node scripts/server.js",
     "start": "node scripts/server.js"
+  },
+  "dependencies": {
+    "pg": "^8.23.0"
   }
 }
