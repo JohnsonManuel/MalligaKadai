@@ -15,10 +15,16 @@
         <span class="brand-logo">🦊</span>
         <div>
           <div class="brand-name">SparFuchs</div>
-          <div class="brand-tag">Günstigster Supermarkt der Woche</div>
+          <div class="brand-tag" id="tagline">Günstigster Supermarkt der Woche</div>
         </div>
       </div>
-      <div class="week-badge" id="weekBadge">lädt…</div>
+      <div class="topbar-right">
+        <div class="langtoggle" id="langToggle" role="tablist" aria-label="Language">
+          <button type="button" class="lt" data-lang="de">DE</button>
+          <button type="button" class="lt" data-lang="en">EN</button>
+        </div>
+        <div class="week-badge" id="weekBadge">…</div>
+      </div>
     </div>
   </header>
 
@@ -29,17 +35,17 @@
     <!-- search real products -->
     <section class="panel">
       <div class="panel-head">
-        <h2>Produkte suchen</h2>
-        <span class="muted small">echte Angebote · <span id="regionLabel">–</span></span>
+        <h2 id="searchTitle">Produkte suchen</h2>
+        <span class="muted small"><span id="realOffersLabel">echte Angebote</span> · <span id="regionLabel">–</span></span>
       </div>
-      <input id="search" class="search" type="search" placeholder="Produkt suchen … (z. B. Monster, Joghurt, Kaffee, Barilla)" autocomplete="off" />
+      <input id="search" class="search" type="search" placeholder="Produkt suchen …" autocomplete="off" />
       <div id="searchResults" class="results"></div>
     </section>
 
     <!-- user favorites -->
     <section class="panel">
       <div class="panel-head">
-        <h2>Deine Favoriten</h2>
+        <h2 id="favTitle">Deine Favoriten</h2>
         <span class="muted" id="favCount">0 gespeichert</span>
       </div>
       <div id="favSummary" class="summary hidden"></div>
@@ -49,7 +55,7 @@
 
   <footer class="wrap foot">
     <p id="dataMeta" class="muted"></p>
-    <p class="muted small">Echte Prospekt-Angebote via kaufDA · nur zur Veranschaulichung · Favoriten werden lokal in deinem Browser gespeichert.</p>
+    <p class="muted small" id="footerNote">Echte Prospekt-Angebote via kaufDA · nur zur Veranschaulichung · Favoriten werden lokal in deinem Browser gespeichert.</p>
   </footer>
 
   <script src="js/app.js"></script>
