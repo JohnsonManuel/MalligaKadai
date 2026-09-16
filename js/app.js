@@ -2,32 +2,38 @@
 
 // ---- state ----
 const state = {
-  catalog: [],
-  chains: new Map(),      // id -> chain
-  branches: [],
-  offers: [],             // {productId, chainId, price, onOffer, wasPrice?}
-  meta: null,
-  favorites: loadFavorites(),
-  userLoc: null,          // {lat,lng}
-  locLabel: null,         // human-readable location label
-  nearestChainIds: [],    // 3 nearest chains (by closest branch)
-  strategy: "cheapest",
-  // real data (kaufDA)
-  mode: "real",           // "real" | "demo"
-  kaufda: null            // loaded offers-latest.json (brochure-based offers)
+  chains: new Map(),   // chainId -> {name,color,initials}
+  kaufda: null,        // loaded offers-latest.json (real brochure offers)
+  ready: false,        // is this week's data valid today?
+  favorites: loadFavorites()   // [{ key, title }]  key = normalized product title
 };
 
 const $ = (s) => document.querySelector(s);
 const eur = (n) => n.toLocaleString("de-DE", { style: "currency", currency: "EUR" });
-const fmtDay = (d) => new Date(d).toLocaleDateString("de-DE", { day: "2-digit", month: "long" });
 const fmtShort = (d) => new Date(d).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit" });
+const fmtDay = (d) => new Date(d).toLocaleDateString("de-DE", { day: "2-digit", month: "long" });
+const esc = (s) => (s || "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const normTitle = (s) => (s || "").toLowerCase().replace(/\s+/g, " ").trim();
 
-// Must match the term derivation in scripts/fetch-kaufda.js so favorites map to offers.
-const termFor = (p) => (p.name.split("(")[0] || p.name).trim();
+// ---- favorites (localStorage, per-user) ----
+function loadFavorites() {
+  try { return JSON.parse(localStorage.getItem("sf_favs_v2") || "[]"); } catch { return []; }
+}
+function saveFavorites() {
+  try { localStorage.setItem("sf_favs_v2", JSON.stringify(state.favorites)); } catch {}
+}
+const isFav = (key) => state.favorites.some((f) => f.key === key);
+function toggleFav(key, title) {
+  const i = state.favorites.findIndex((f) => f.key === key);
+  if (i >= 0) state.favorites.splice(i, 1);
+  else state.favorites.push({ key, title });
+  saveFavorites();
+  renderSearch();
+  renderFavorites();
+}
 
+// ---- retailer visuals ----
 function hashHue(s) { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0; return h % 360; }
-
-// Visual identity for a retailer on a kaufDA offer (mapped chains reuse stores.json colors).
 function retailerVisual(o) {
   const c = o.chainId && state.chains.get(o.chainId);
   if (c) return { color: c.color, initials: c.initials, name: o.retailer || c.name };
@@ -36,180 +42,85 @@ function retailerVisual(o) {
   return { color: `hsl(${hashHue(name)} 52% 42%)`, initials, name };
 }
 const chipHTML = (v) => `<span class="chip"><span class="dot" style="background:${v.color}">${v.initials}</span>${v.name}</span>`;
-const esc = (s) => (s || "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
-// Match a favorite (catalog product) to kaufDA offers by keyword over the offer haystack.
-function matchFavorite(term) {
-  if (!state.kaufda) return [];
-  const t = term.toLowerCase();
-  const words = t.split(/[\s\-]+/).filter((w) => w.length >= 4);
-  const primary = words.sort((a, b) => b.length - a.length)[0] || t;
-  return state.kaufda.offers.filter((o) =>
-    typeof o.price === "number" && o.price > 0 &&
-    ((o.searchText || "").includes(t) || (o.searchText || "").includes(primary)));
+// ---- offer helpers ----
+const pricedOffers = () => (state.kaufda ? state.kaufda.offers.filter((o) => typeof o.price === "number" && o.price > 0) : []);
+
+// all current offers for a favorite product (exact title match, else keyword fallback)
+function offersForKey(key) {
+  const exact = pricedOffers().filter((o) => normTitle(o.productTitle) === key);
+  const pool = exact.length ? exact : pricedOffers().filter((o) => (o.searchText || "").includes(key));
+  return pool.sort((a, b) => a.price - b.price);
 }
 
-function loadFavorites() {
-  try { return JSON.parse(localStorage.getItem("sf_favorites") || "[]"); }
-  catch { return []; }
-}
-function saveFavorites() {
-  try { localStorage.setItem("sf_favorites", JSON.stringify(state.favorites)); } catch {}
-}
-
-// ---- data helpers ----
-const product = (id) => state.catalog.find((p) => p.id === id);
-const chain = (id) => state.chains.get(id);
-const offersFor = (pid) => state.offers.filter((o) => o.productId === pid);
-
-function cheapestOffer(offers) {
-  return offers.reduce((best, o) => (!best || o.price < best.price ? o : best), null);
-}
-
-function haversine(a, b) {
-  const R = 6371, toRad = (d) => (d * Math.PI) / 180;
-  const dLat = toRad(b.lat - a.lat), dLng = toRad(b.lng - a.lng);
-  const s = Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2;
-  return 2 * R * Math.asin(Math.sqrt(s));
-}
-
-function nearestBranches() {
-  if (!state.userLoc) return [];
-  return state.branches
-    .map((b) => ({ ...b, dist: haversine(state.userLoc, b) }))
-    .sort((a, b) => a.dist - b.dist);
-}
-
-// The set of chains to consider for a given strategy.
-function allowedChains() {
-  if (state.strategy === "cheapest" || !state.userLoc) return null; // null = all
-  if (state.strategy === "nearest") return new Set([state.nearestChainIds[0]]);
-  return new Set(state.nearestChainIds); // balanced: 3 nearest
-}
-
-// Best offer for a product under the current strategy.
-function recommend(pid) {
-  const allow = allowedChains();
-  let pool = offersFor(pid);
-  if (allow) pool = pool.filter((o) => allow.has(o.chainId));
-  return { best: cheapestOffer(pool), pool: offersFor(pid) };
-}
-
-// ---- rendering ----
-function renderCatalog() {
+// ---- rendering: search ----
+function renderSearch() {
+  const wrap = $("#searchResults");
   const q = ($("#search").value || "").trim().toLowerCase();
-  const grid = $("#catalog");
-  grid.innerHTML = "";
-  const list = state.catalog.filter((p) =>
-    !q || p.name.toLowerCase().includes(q) || p.nameEn.toLowerCase().includes(q) || p.category.toLowerCase().includes(q)
-  );
-  for (const p of list) {
-    const on = state.favorites.includes(p.id);
-    const el = document.createElement("button");
-    el.className = "prod" + (on ? " on" : "");
-    el.type = "button";
-    el.innerHTML = `
-      <span class="prod-emoji">${p.emoji}</span>
-      <span class="prod-name">${p.name}</span>
-      <span class="prod-unit">${p.unit}</span>
-      <span class="prod-check">${on ? "✓ Favorit" : ""}</span>`;
-    el.addEventListener("click", () => toggleFavorite(p.id));
-    grid.appendChild(el);
-  }
-  $("#favCount").textContent = `${state.favorites.length} ausgewählt`;
-}
-
-function toggleFavorite(id) {
-  const i = state.favorites.indexOf(id);
-  if (i >= 0) state.favorites.splice(i, 1);
-  else state.favorites.push(id);
-  saveFavorites();
-  renderCatalog();
-  renderResults();
-}
-
-function chip(chainId) {
-  const c = chain(chainId);
-  if (!c) return chainId;
-  return `<span class="chip"><span class="dot" style="background:${c.color}">${c.initials}</span>${c.name}</span>`;
-}
-
-function renderResults() {
-  if (state.mode === "real" && state.kaufda) {
-    const q = ($("#search").value || "").trim();
-    return q.length >= 2 ? renderOfferSearch(q) : renderRealResults();
-  }
-  return renderDemoResults();
-}
-
-// Free-text search over the loaded kaufDA offers (any product in the pulled set).
-function renderOfferSearch(q) {
-  const wrap = $("#results");
-  const summary = $("#summary");
-  const ql = q.toLowerCase();
-
-  const matches = state.kaufda.offers
-    .filter((o) => typeof o.price === "number" && o.price > 0 && (o.searchText || "").includes(ql))
-    .sort((a, b) => a.price - b.price);
-
-  if (!matches.length) {
-    summary.classList.add("hidden");
-    wrap.innerHTML =
-      `<div class="empty">Keine Angebote für „${esc(q)}“ in Berlin&nbsp;10178 diese Woche.</div>`;
+  wrap.innerHTML = "";
+  if (!state.kaufda) return;
+  if (q.length < 2) {
+    wrap.innerHTML = `<div class="empty">Tippe mindestens 2 Zeichen, um echte Angebote zu durchsuchen und mit ★ zu deinen Favoriten hinzuzufügen.</div>`;
     return;
   }
+  const matches = pricedOffers().filter((o) => (o.searchText || "").includes(q));
+  if (!matches.length) {
+    wrap.innerHTML = `<div class="empty">Keine Angebote für „${esc(q)}“ in ${esc(state.kaufda.city)} ${esc(state.kaufda.zip)} diese Woche.</div>`;
+    return;
+  }
+  // group distinct products by normalized title
+  const byTitle = new Map();
+  for (const o of matches) {
+    const key = normTitle(o.productTitle);
+    if (!key) continue;
+    let g = byTitle.get(key);
+    if (!g) { g = { key, title: o.productTitle, min: o.price, count: 0, retailers: new Set() }; byTitle.set(key, g); }
+    g.count++; g.retailers.add(o.retailer); if (o.price < g.min) { g.min = o.price; g.title = o.productTitle; }
+  }
+  const products = [...byTitle.values()].sort((a, b) => a.min - b.min).slice(0, 40);
 
-  const capped = matches.slice(0, 80);
-  const rows = capped.map((o, i) => {
-    const v = retailerVisual(o);
-    const label = `${o.brand ? `<b>${esc(o.brand)}</b> ` : ""}${esc(o.productTitle)}${o.unitPrice ? ` · ${esc(o.unitPrice)}` : ""}`;
-    const price = `${esc(o.priceFormatted) || eur(o.price)}${o.wasPrice ? ` <s>${eur(o.wasPrice)}</s>` : ""}`;
-    return `<div class="orow ${i === 0 ? "win" : ""}">${chipHTML(v)}<span class="oname">${label}</span><span class="oprice">${price}</span></div>`;
-  }).join("");
-
-  wrap.innerHTML =
-    `<div class="rescard">
-      <div class="srhead">${matches.length} Angebot${matches.length === 1 ? "" : "e"} für „${esc(q)}“ · Berlin&nbsp;10178${matches.length > capped.length ? ` <span class="muted small">(zeige günstigste ${capped.length})</span>` : ""}</div>
-      <div class="allprices rows" style="display:block">${rows}</div>
-    </div>`;
-
-  const retailers = new Set(matches.map((o) => o.retailer)).size;
-  summary.classList.remove("hidden");
-  summary.innerHTML = `
-    <div class="stat"><div class="k">Treffer</div><div class="v">${matches.length}</div></div>
-    <div class="stat save"><div class="k">Günstigster Preis</div><div class="v">${eur(matches[0].price)}</div></div>
-    <div class="stat"><div class="k">Händler</div><div class="v">${retailers}</div></div>`;
+  const frag = document.createDocumentFragment();
+  for (const p of products) {
+    const on = isFav(p.key);
+    const row = document.createElement("div");
+    row.className = "prow";
+    row.innerHTML = `
+      <button class="star ${on ? "on" : ""}" title="${on ? "Favorit entfernen" : "Zu Favoriten"}">${on ? "★" : "☆"}</button>
+      <div class="pinfo"><div class="ptitle">${esc(p.title)}</div>
+        <div class="pmeta">ab <b>${eur(p.min)}</b> · ${p.count} Angebot${p.count === 1 ? "" : "e"} · ${p.retailers.size} Händler</div></div>`;
+    row.querySelector(".star").addEventListener("click", () => toggleFav(p.key, p.title));
+    frag.appendChild(row);
+  }
+  wrap.appendChild(frag);
 }
 
-// ---- REAL results (kaufDA offers for Berlin 10178) ----
-function renderRealResults() {
-  const wrap = $("#results");
-  const summary = $("#summary");
+// ---- rendering: favorites ----
+function renderFavorites() {
+  const wrap = $("#favResults");
+  const summary = $("#favSummary");
   wrap.innerHTML = "";
+  $("#favCount").textContent = `${state.favorites.length} gespeichert`;
 
   if (!state.favorites.length) {
     summary.classList.add("hidden");
-    wrap.innerHTML = `<div class="empty">Wähle oben deine Lieblingsprodukte aus, um echte Angebote in Berlin&nbsp;10178 zu sehen.</div>`;
+    wrap.innerHTML = `<div class="empty">Noch keine Favoriten. Suche oben nach echten Produkten und markiere sie mit ★ — sie bleiben in diesem Browser gespeichert.</div>`;
     return;
   }
 
   let basket = 0, saved = 0, found = 0;
   const frag = document.createDocumentFragment();
 
-  for (const pid of state.favorites) {
-    const p = product(pid);
-    const offers = matchFavorite(termFor(p)).sort((a, b) => a.price - b.price);
-
+  for (const fav of state.favorites) {
+    const offers = offersForKey(fav.key);
     const card = document.createElement("div");
     card.className = "rescard";
 
     if (!offers.length) {
       card.innerHTML = `<div class="rescard-top">
-        <span class="emoji">${p.emoji}</span>
-        <div class="titles"><div class="pname">${esc(p.name)}</div>
-        <div class="punit">${esc(p.unit)}</div></div>
-        <div class="best"><div class="where">Diese Woche kein Angebot</div></div></div>`;
+        <div class="titles"><div class="pname">${esc(fav.title)}</div>
+        <div class="punit">Diese Woche kein Angebot</div></div>
+        <button class="favx" title="Entfernen">✕</button></div>`;
+      card.querySelector(".favx").addEventListener("click", () => toggleFav(fav.key, fav.title));
       frag.appendChild(card);
       continue;
     }
@@ -218,42 +129,40 @@ function renderRealResults() {
     const best = offers[0];
     const bv = retailerVisual(best);
     basket += best.price;
-    const dealNow = best.wasPrice && best.wasPrice > best.price;
-    if (dealNow) saved += best.wasPrice - best.price;
+    const deal = best.wasPrice && best.wasPrice > best.price;
+    if (deal) saved += best.wasPrice - best.price;
 
-    const rows = offers.map((o) => {
+    const rows = offers.map((o, i) => {
       const v = retailerVisual(o);
-      const label = `${o.brand ? `<b>${esc(o.brand)}</b> ` : ""}${esc(o.productTitle)}${o.unitPrice ? ` · ${esc(o.unitPrice)}` : ""}`;
+      const label = `${esc(o.productTitle)}${o.unitPrice ? ` · ${esc(o.unitPrice)}` : ""}`;
       const price = `${esc(o.priceFormatted) || eur(o.price)}${o.wasPrice ? ` <s>${eur(o.wasPrice)}</s>` : ""}`;
-      return `<div class="orow ${o === best ? "win" : ""}">${chipHTML(v)}<span class="oname">${label}</span><span class="oprice">${price}</span></div>`;
+      return `<div class="orow ${i === 0 ? "win" : ""}">${chipHTML(v)}<span class="oname">${label}</span><span class="oprice">${price}</span></div>`;
     }).join("");
 
     card.innerHTML = `
       <div class="rescard-top">
-        <span class="emoji">${p.emoji}</span>
         <div class="titles">
-          <div class="pname">${esc(p.name)}${dealNow ? `<span class="tag-offer">ANGEBOT</span>` : ""}</div>
-          <div class="punit">${chipHTML(bv)} · ${best.brand ? esc(best.brand) + " " : ""}${esc(best.productTitle)}</div>
+          <div class="pname">${esc(fav.title)}${deal ? `<span class="tag-offer">ANGEBOT</span>` : ""}</div>
+          <div class="punit">${chipHTML(bv)}${best.validUntil ? ` · gültig bis ${fmtShort(best.validUntil)}` : ""}</div>
         </div>
         <div class="best">
-          <div class="price ${dealNow ? "deal" : ""}">${esc(best.priceFormatted) || eur(best.price)}</div>
+          <div class="price ${deal ? "deal" : ""}">${esc(best.priceFormatted) || eur(best.price)}</div>
           ${best.wasPrice ? `<div class="was">${eur(best.wasPrice)}</div>` : ""}
-          ${best.validUntil ? `<div class="valid">bis ${fmtShort(best.validUntil)}</div>` : ""}
         </div>
+        <button class="favx" title="Entfernen">✕</button>
       </div>
       <span class="toggle">Alle ${offers.length} Angebote ansehen ▾</span>
       <div class="allprices rows">${rows}</div>`;
 
+    card.querySelector(".favx").addEventListener("click", () => toggleFav(fav.key, fav.title));
     card.querySelector(".toggle").addEventListener("click", (e) => {
       card.classList.toggle("open");
-      e.target.textContent = card.classList.contains("open")
-        ? `Angebote ausblenden ▴` : `Alle ${offers.length} Angebote ansehen ▾`;
+      e.target.textContent = card.classList.contains("open") ? "Angebote ausblenden ▴" : `Alle ${offers.length} Angebote ansehen ▾`;
     });
     frag.appendChild(card);
   }
 
   wrap.appendChild(frag);
-
   summary.classList.remove("hidden");
   summary.innerHTML = `
     <div class="stat"><div class="k">Warenkorb (Bestpreis)</div><div class="v">${eur(basket)}</div></div>
@@ -261,223 +170,61 @@ function renderRealResults() {
     <div class="stat"><div class="k">Angebote gefunden</div><div class="v">${found}/${state.favorites.length}</div></div>`;
 }
 
-// ---- DEMO results (seed data + location strategies) ----
-function renderDemoResults() {
-  const wrap = $("#results");
-  const summary = $("#summary");
-  wrap.innerHTML = "";
+// ---- data readiness banner ----
+function computeReady() {
+  if (!state.kaufda || !state.kaufda.offers.length) return false;
+  const today = new Date().toISOString().slice(0, 10);
+  const until = state.kaufda.offers.map((o) => o.validUntil).filter(Boolean).sort().pop();
+  return !!until && until.slice(0, 10) >= today;
+}
 
-  if (!state.favorites.length) {
-    summary.classList.add("hidden");
-    wrap.innerHTML = `<div class="empty">Wähle oben ein paar Lieblingsprodukte aus, um die günstigsten Märkte zu sehen.</div>`;
+function renderStatus() {
+  const el = $("#statusBanner");
+  const k = state.kaufda;
+  if (!k || !k.offers.length) {
+    el.innerHTML = `<div class="realctx warn"><span class="dotwarn"></span>
+      <b>Die Angebote für diese Woche sind noch nicht verfügbar.</b> Bitte schau später wieder vorbei.</div>`;
+    $("#weekBadge").textContent = "Daten in Vorbereitung";
     return;
   }
-
-  let basketTotal = 0, basketFull = 0, dealCount = 0;
-  const frag = document.createDocumentFragment();
-
-  for (const pid of state.favorites) {
-    const p = product(pid);
-    const { best, pool } = recommend(pid);
-    const card = document.createElement("div");
-    card.className = "rescard";
-
-    if (!best) {
-      card.innerHTML = `<div class="rescard-top">
-        <span class="emoji">${p.emoji}</span>
-        <div class="titles"><div class="pname">${p.name}</div>
-        <div class="punit">${p.unit}</div></div>
-        <div class="best"><div class="where">Kein Angebot in Auswahl</div></div></div>`;
-      frag.appendChild(card);
-      continue;
-    }
-
-    basketTotal += best.price;
-    const avg = pool.reduce((s, o) => s + o.price, 0) / pool.length;
-    basketFull += avg;
-    if (best.onOffer) dealCount++;
-
-    const wasHtml = best.wasPrice ? `<div class="was">${eur(best.wasPrice)}</div>` : "";
-    const offerTag = best.onOffer ? `<span class="tag-offer">ANGEBOT</span>` : "";
-
-    const sorted = [...pool].sort((a, b) => a.price - b.price);
-    const linesHtml = sorted.map((o) =>
-      `<div class="pline ${o.chainId === best.chainId ? "win" : ""}">
-        ${chip(o.chainId)}<span>${eur(o.price)}${o.onOffer ? " ⚡" : ""}</span></div>`).join("");
-
-    card.innerHTML = `
-      <div class="rescard-top">
-        <span class="emoji">${p.emoji}</span>
-        <div class="titles">
-          <div class="pname">${p.name}${offerTag}</div>
-          <div class="punit">${p.unit} · ${chip(best.chainId)}</div>
-        </div>
-        <div class="best">
-          <div class="price ${best.onOffer ? "deal" : ""}">${eur(best.price)}</div>
-          ${wasHtml}
-        </div>
-      </div>
-      <span class="toggle">Alle ${pool.length} Preise ansehen ▾</span>
-      <div class="allprices">${linesHtml}</div>`;
-
-    card.querySelector(".toggle").addEventListener("click", (e) => {
-      card.classList.toggle("open");
-      e.target.textContent = card.classList.contains("open")
-        ? `Preise ausblenden ▴` : `Alle ${pool.length} Preise ansehen ▾`;
-    });
-    frag.appendChild(card);
-  }
-
-  wrap.appendChild(frag);
-
-  const saved = basketFull - basketTotal;
-  summary.classList.remove("hidden");
-  summary.innerHTML = `
-    <div class="stat"><div class="k">Warenkorb (Bestpreis)</div><div class="v">${eur(basketTotal)}</div></div>
-    <div class="stat save"><div class="k">Ersparnis ggü. Ø-Preis</div><div class="v">${eur(Math.max(0, saved))}</div></div>
-    <div class="stat"><div class="k">Aktuelle Angebote</div><div class="v">${dealCount}</div></div>`;
-}
-
-// ---- location ----
-function useLocation() {
-  const status = $("#locStatus");
-  if (!navigator.geolocation) { status.textContent = "Standort wird vom Browser nicht unterstützt."; return; }
-  status.textContent = "GPS-Standort wird ermittelt …";
-  navigator.geolocation.getCurrentPosition(
-    (pos) => setLocation(pos.coords.latitude, pos.coords.longitude, "GPS-Standort"),
-    (err) => { status.textContent = "Standort nicht verfügbar (" + err.message + "). Nutze die PLZ-Eingabe."; },
-    { enableHighAccuracy: false, timeout: 8000 }
-  );
-}
-
-// Look up a German postal code -> coordinates (free, CORS-enabled).
-async function usePlz() {
-  const status = $("#locStatus");
-  const plz = ($("#plzInput").value || "").trim();
-  if (!/^\d{5}$/.test(plz)) { status.textContent = "Bitte eine 5-stellige Postleitzahl eingeben."; return; }
-  status.textContent = `PLZ ${plz} wird gesucht …`;
-  try {
-    const r = await fetch(`https://api.zippopotam.us/de/${plz}`);
-    if (!r.ok) throw new Error("nicht gefunden");
-    const d = await r.json();
-    const p = d.places[0];
-    setLocation(+p.latitude, +p.longitude, `${plz} ${p["place name"]}`);
-  } catch {
-    status.textContent = `PLZ ${plz} nicht gefunden. Bitte prüfen oder eine Schnellauswahl nutzen.`;
-  }
-}
-
-function setLocation(lat, lng, label) {
-  state.userLoc = { lat, lng };
-  state.locLabel = label;
-  onLocation();
-}
-
-function onLocation() {
-  const branches = nearestBranches();
-  // 3 nearest DISTINCT chains, each with its closest branch
-  const seen = new Set(); const nearChains = [];
-  for (const b of branches) {
-    if (!seen.has(b.chainId)) { seen.add(b.chainId); nearChains.push(b); }
-    if (nearChains.length >= 3) break;
-  }
-  state.nearestChainIds = nearChains.map((b) => b.chainId);
-
-  $("#locStatus").textContent = `Standort: ${state.locLabel || "erkannt"}. Wähle eine Priorität.`;
-  document.querySelectorAll('.strat-opt[data-lock] input').forEach((i) => (i.disabled = false));
-  document.querySelectorAll(".strat-opt.is-locked").forEach((el) => el.classList.remove("is-locked"));
-
-  const fmtDist = (km) => (km < 1 ? Math.round(km * 1000) + " m" : km.toFixed(1) + " km");
-  const near = $("#nearby");
-  near.classList.remove("hidden");
-  let html = `<h3>Deine nächsten Märkte</h3>` + nearChains.map((b) =>
-    `<div class="branch">${chip(b.chainId)}<span class="muted">${b.name}</span>
-     <span class="dist">${fmtDist(b.dist)}</span></div>`).join("");
-  // Sample store data currently only covers München + Berlin — be honest if far.
-  if (nearChains[0] && nearChains[0].dist > 40) {
-    html += `<div class="coverage">ℹ️ Aktuell sind nur Beispiel-Märkte in München &amp; Berlin hinterlegt
-      (nächster ist ${fmtDist(nearChains[0].dist)} entfernt). Die Standort-Prioritäten funktionieren,
-      aber echte Filialdaten für deine Region folgen.</div>`;
-  }
-  near.innerHTML = html;
-
-  renderResults();
-}
-
-// Switch between real (kaufDA) and demo (seed) data modes.
-function setMode(mode) {
-  if (mode === "real" && !state.kaufda) mode = "demo";
-  state.mode = mode;
-  document.querySelectorAll("#modeToggle .mt").forEach((b) =>
-    b.classList.toggle("on", b.dataset.mode === mode));
-  // demo location panel only makes sense in demo mode
-  $("#locPanel").classList.toggle("hidden", mode === "real");
-  $("#realContext").classList.toggle("hidden", mode !== "real");
-  $("#search").placeholder = mode === "real"
-    ? "Angebote durchsuchen … (z. B. Joghurt, Barilla, Käse) oder Favoriten wählen"
-    : "Produkt suchen … (z. B. Monster, Milch, Hähnchen)";
-  applyHeader();
-  renderResults();
-}
-
-function applyHeader() {
-  const badge = $("#weekBadge"), meta = $("#dataMeta");
-  if (state.mode === "real" && state.kaufda) {
-    const k = state.kaufda;
-    badge.textContent = `Echte Angebote · Berlin ${k.zip}`;
-    meta.textContent = `Datenquelle: kaufDA (${k.offerCount} Angebote, Berlin ${k.zip}) · Stand ${new Date(k.generatedAt).toLocaleString("de-DE")}.`;
+  const retailers = new Set(k.offers.map((o) => o.retailer).filter(Boolean)).size;
+  const until = k.offers.map((o) => o.validUntil).filter(Boolean).sort().pop();
+  if (state.ready) {
+    el.innerHTML = `<div class="realctx"><span class="live">Live</span>
+      <b>Echte Angebote</b> · <b>${esc(k.city)} ${esc(k.zip)}</b> · ${k.offerCount} Angebote aus ${k.brochureCount || "?"} Prospekten von ${retailers} Händlern${until ? ` · gültig bis ${fmtShort(until)}` : ""}</div>`;
+    $("#weekBadge").textContent = until ? `Gültig bis ${fmtDay(until)}` : "Aktuelle Woche";
   } else {
-    badge.textContent = `Angebote gültig bis ${fmtDay(state.meta.validUntil)}`;
-    meta.textContent = `Beispieldaten (${state.meta.source}) · aktualisiert am ${new Date(state.meta.generatedAt).toLocaleString("de-DE")} · Angebotswoche ab ${fmtDay(state.meta.weekOf)}.`;
+    el.innerHTML = `<div class="realctx warn"><span class="dotwarn"></span>
+      <b>Die Angebote der aktuellen Woche werden gerade vorbereitet.</b>
+      Angezeigt werden die letzten verfügbaren Angebote${until ? ` (gültig bis ${fmtShort(until)})` : ""}.</div>`;
+    $("#weekBadge").textContent = "Vorwoche";
   }
 }
 
 // ---- boot ----
 async function boot() {
+  // stores.json is only used for chain colors; ignore if missing
   try {
-    const [catalog, stores, offers] = await Promise.all([
-      fetch("data/catalog.json").then((r) => r.json()),
-      fetch("data/stores.json").then((r) => r.json()),
-      fetch("data/offers.json").then((r) => r.json())
-    ]);
-    state.catalog = catalog.products;
-    stores.chains.forEach((c) => state.chains.set(c.id, c));
-    state.branches = stores.branches;
-    state.offers = offers.offers;
-    state.meta = offers;
-  } catch (e) {
-    document.querySelector("main").innerHTML =
-      `<div class="panel"><b>Daten konnten nicht geladen werden.</b><br>
-      Bitte die Seite über einen lokalen Server öffnen (siehe README), nicht per Doppelklick als Datei.<br>
-      <span class="muted small">${e.message}</span></div>`;
-    return;
-  }
+    const stores = await fetch("data/stores.json").then((r) => r.json());
+    (stores.chains || []).forEach((c) => state.chains.set(c.id, c));
+  } catch {}
 
-  // Real kaufDA data is optional — degrade to demo if it's not there.
   try {
-    const k = await fetch("data/kaufda/10178/offers-latest.json").then((r) => r.json());
-    if (k && Array.isArray(k.offers) && k.offers.length) {
-      state.kaufda = k;
-      const retailers = new Set(k.offers.map((o) => o.retailer).filter(Boolean)).size;
-      const until = k.offers.map((o) => o.validUntil).filter(Boolean).sort().pop();
-      $("#realContext").innerHTML =
-        `<span class="live">Live</span> <b>Echte Angebote</b> aus kaufDA · <b>Berlin ${k.zip}</b> · ${k.offerCount} Angebote aus ${k.brochureCount || "?"} Prospekten von ${retailers} Händlern${until ? ` · gültig bis ${fmtShort(until)}` : ""}`;
-    }
-  } catch { /* no real data → demo mode */ }
+    const k = await fetch("data/kaufda/10178/offers-latest.json", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null));
+    if (k && Array.isArray(k.offers)) state.kaufda = k;
+  } catch {}
 
-  $("#search").addEventListener("input", () => { renderCatalog(); renderResults(); });
-  $("#locBtn").addEventListener("click", useLocation);
-  $("#plzBtn").addEventListener("click", usePlz);
-  $("#plzInput").addEventListener("keydown", (e) => { if (e.key === "Enter") usePlz(); });
-  document.querySelectorAll(".city").forEach((b) =>
-    b.addEventListener("click", () => setLocation(+b.dataset.lat, +b.dataset.lng, b.dataset.label)));
-  document.querySelectorAll('input[name="strat"]').forEach((r) =>
-    r.addEventListener("change", (e) => { state.strategy = e.target.value; renderResults(); }));
-  document.querySelectorAll("#modeToggle .mt").forEach((b) =>
-    b.addEventListener("click", () => setMode(b.dataset.mode)));
+  state.ready = computeReady();
+  $("#regionLabel").textContent = state.kaufda ? `${state.kaufda.city} ${state.kaufda.zip}` : "–";
+  $("#dataMeta").textContent = state.kaufda
+    ? `Datenquelle: kaufDA · ${state.kaufda.offerCount} Angebote · Stand ${new Date(state.kaufda.generatedAt).toLocaleString("de-DE")}.`
+    : "Noch keine Daten extrahiert.";
 
-  renderCatalog();
-  setMode(state.kaufda ? "real" : "demo");
+  $("#search").addEventListener("input", renderSearch);
+
+  renderStatus();
+  renderSearch();
+  renderFavorites();
 }
 
 boot();

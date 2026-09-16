@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SparFuchs — Admin</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛠️</text></svg>" />
+  <link rel="stylesheet" href="css/styles.css" />
+  <style>
+    .admin { max-width: 760px; margin: 0 auto; padding: 0 16px; }
+    .status-grid { display: flex; flex-wrap: wrap; gap: 10px; margin: 14px 0; }
+    .badge-big { display: inline-flex; align-items: center; gap: 8px; font-weight: 800; font-size: 15px; padding: 8px 14px; border-radius: 999px; }
+    .badge-ready { background: var(--save-bg); color: var(--save); }
+    .badge-stale { background: color-mix(in srgb, var(--primary) 12%, var(--surface)); color: var(--primary-ink); }
+    .kv { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; font-size: 13.5px; margin: 10px 0; }
+    .kv dt { color: var(--muted); }
+    .kv dd { margin: 0; font-weight: 600; }
+    .logbox { background: #0e1013; color: #cbd3da; font-family: ui-monospace, "Cascadia Code", Menlo, monospace; font-size: 12px; line-height: 1.5; border-radius: 12px; padding: 12px 14px; height: 320px; overflow: auto; white-space: pre-wrap; border: 1px solid var(--line); }
+    .row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    select { padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); color: var(--ink); font-size: 14px; }
+    .btn[disabled] { opacity: .55; cursor: not-allowed; }
+    .spin { width: 14px; height: 14px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; display: inline-block; animation: sp .7s linear infinite; }
+    @keyframes sp { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <header class="topbar"><div class="wrap topbar-inner">
+    <div class="brand"><span class="brand-logo">🛠️</span><div>
+      <div class="brand-name">SparFuchs · Admin</div>
+      <div class="brand-tag">Wöchentliche Daten-Extraktion</div>
+    </div></div>
+    <a class="week-badge" href="/" style="text-decoration:none">← Zur App</a>
+  </div></header>
+
+  <main class="admin">
+    <section class="panel">
+      <div class="panel-head"><h2>Datenstatus</h2><span id="badge"></span></div>
+      <div class="row" style="margin-bottom:12px">
+        <label>Region:</label>
+        <select id="zip"></select>
+      </div>
+      <dl class="kv" id="kv"></dl>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>Extraktion ausführen</h2></div>
+      <p class="muted small">Holt die aktuellen Prospekt-Angebote von kaufDA für die gewählte Region und schreibt <code>data/kaufda/&lt;PLZ&gt;/offers-latest.json</code>. Dauert ~30–60&nbsp;Sekunden.</p>
+      <div class="row" style="margin:12px 0">
+        <button id="run" class="btn">▶ Daten jetzt extrahieren</button>
+        <span id="runState" class="muted small"></span>
+      </div>
+      <div id="logbox" class="logbox">Noch kein Lauf in dieser Sitzung.</div>
+    </section>
+  </main>
+
+  <script>
+    const $ = (s) => document.querySelector(s);
+    let pollTimer = null;
+
+    function fmt(d) { try { return new Date(d).toLocaleString("de-DE"); } catch { return "—"; } }
+
+    async function refreshStatus() {
+      const zip = $("#zip").value || "";
+      const r = await fetch("/api/status" + (zip ? "?zip=" + zip : "")).then((x) => x.json());
+      // populate zip options once
+      if (!$("#zip").options.length) {
+        r.locations.forEach((z) => { const o = document.createElement("option"); o.value = z; o.textContent = z; $("#zip").appendChild(o); });
+        $("#zip").value = r.zip;
+      }
+      const d = r.data;
+      const badge = $("#badge");
+      if (!d.exists) badge.innerHTML = `<span class="badge-big badge-stale">⚠ Keine Daten</span>`;
+      else if (d.ready) badge.innerHTML = `<span class="badge-big badge-ready">✓ Woche bereit</span>`;
+      else badge.innerHTML = `<span class="badge-big badge-stale">⚠ Veraltet / nicht bereit</span>`;
+
+      $("#kv").innerHTML = d.exists ? `
+        <dt>Bereit für diese Woche</dt><dd>${d.ready ? "Ja" : "Nein — bitte neu extrahieren"}</dd>
+        <dt>Angebote</dt><dd>${d.offerCount ?? "—"}</dd>
+        <dt>Prospekte / Händler</dt><dd>${d.brochureCount ?? "—"} / ${d.retailers ?? "—"}</dd>
+        <dt>Gültig bis</dt><dd>${d.validUntil ? d.validUntil.slice(0,10) : "—"}</dd>
+        <dt>Zuletzt erzeugt</dt><dd>${fmt(d.generatedAt)}</dd>`
+        : `<dt>Status</dt><dd>Für diese Region wurden noch keine Daten extrahiert.</dd>`;
+
+      // reflect running job
+      const running = r.job.running;
+      $("#run").disabled = running;
+      $("#runState").innerHTML = running ? `<span class="spin"></span> Extraktion läuft…` : (r.job.finishedAt ? `Letzter Lauf: ${r.job.ok ? "✓ erfolgreich" : "✗ Fehler"} · ${fmt(r.job.finishedAt)}` : "");
+      if (running && !pollTimer) startPolling();
+    }
+
+    async function refreshLog() {
+      const r = await fetch("/api/extract/log").then((x) => x.json());
+      const box = $("#logbox");
+      box.textContent = r.log || "(kein Log)";
+      box.scrollTop = box.scrollHeight;
+      if (!r.running) { clearInterval(pollTimer); pollTimer = null; refreshStatus(); }
+    }
+    function startPolling() { if (pollTimer) return; pollTimer = setInterval(refreshLog, 1200); refreshLog(); }
+
+    $("#run").addEventListener("click", async () => {
+      $("#run").disabled = true; $("#runState").innerHTML = `<span class="spin"></span> Starte…`;
+      const res = await fetch("/api/extract?zip=" + encodeURIComponent($("#zip").value), { method: "POST" });
+      if (res.status === 409) { $("#runState").textContent = "Es läuft bereits eine Extraktion."; }
+      startPolling();
+    });
+    $("#zip").addEventListener("change", refreshStatus);
+
+    refreshStatus();
+    setInterval(() => { if (!pollTimer) refreshStatus(); }, 8000);
+  </script>
+</body>
+</html>

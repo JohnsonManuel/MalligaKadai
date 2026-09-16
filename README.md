@@ -1,64 +1,51 @@
 # 🦊 SparFuchs
 
-Pick your favorite grocery products and see **which German supermarket has the cheapest price this week** — with location-aware suggestions for the closest and best-value store near you.
+Search **real German supermarket offers** in your region, star your favorite products, and see
+**which supermarket has each one cheapest this week**. Favorites are the actual products *you* pick,
+saved locally in your browser.
 
-> MVP status: **Core comparison + location works today** on realistic seed data.
-> Notifications and a live data source are the planned next steps.
-
-## How it's built (two independent parts)
+## How it's built
 
 ```
-┌─────────────────────────┐        writes         ┌──────────────────────┐
-│  Data pipeline (Node)    │ ───────────────────▶  │   data/offers.json    │
-│  scripts/fetch-offers.js │   run every 24h       └──────────┬───────────┘
-│  + swappable adapters    │                                  │ reads
-└─────────────────────────┘                        ┌──────────▼───────────┐
-                                                    │  Static frontend      │
-                                                    │  index.html / js / css│
-                                                    └──────────────────────┘
+┌──────────────────────────┐  writes  ┌────────────────────────────────┐  reads  ┌──────────────────┐
+│  Data pipeline (Node)     │ ───────▶ │ data/kaufda/<zip>/             │ ──────▶ │  Static frontend  │
+│  scripts/fetch-kaufda.js  │  weekly  │   offers-latest.json           │         │  index.html/js/css│
+└──────────────────────────┘          └────────────────────────────────┘         └──────────────────┘
+        ▲ triggered by                                                                     ▲ served by
+        └──────────────────────  scripts/server.js  (/admin panel + /api) ─────────────────┘
 ```
 
-- **Frontend** = plain static HTML/CSS/JS. It only reads `data/offers.json`. Deploys to any static host (Netlify, GitHub Pages, S3…).
-- **Data pipeline** = a Node script that fetches offers and writes that JSON. Runs on a schedule; the site is never coupled to the source.
+- **Frontend** — plain static HTML/CSS/JS. Reads `data/kaufda/<zip>/offers-latest.json`. Deploys to any static host.
+- **Data pipeline** — pulls real offers from kaufDA (see below), writes the JSON. Run weekly.
+- **Server** — `scripts/server.js` serves the app **and** an **admin panel** to run the extraction and see data readiness.
 
 ## Run locally
 
 ```bash
-npm run fetch    # generate data/offers.json (uses the seed source)
-npm run serve    # http://localhost:4173
+npm run serve   # http://localhost:4173  (app)  ·  http://localhost:4173/admin  (admin)
+npm run fetch   # run the kaufDA extraction from the CLI (same as the admin button)
 ```
 
-Open <http://localhost:4173>. (Use the server — opening `index.html` directly won't load the JSON files due to browser file:// restrictions.)
+Open <http://localhost:4173> (use the server, not the file directly).
 
-## Features (MVP)
+## User app
 
-- Pick favorites from a German product catalog (Hähnchen, Monster, Red Bull, Milch …), saved in your browser.
-- Per product: the **cheapest chain this week**, offer badges, and all chains' prices.
-- Warenkorb summary: total at best price + savings vs. average.
-- **Location** (📍): finds your 3 nearest stores and unlocks two more priorities:
-  - **Günstigster Preis** — best price anywhere
-  - **Nächster Markt** — prices at your closest store
-  - **Beste Wahl in der Nähe** — cheapest among your 3 nearest stores
+- **Search** the region's real offers; results group by product with the cheapest price + how many retailers carry it.
+- **★ Favorite** any product — favorites are the real products you picked, saved in `localStorage` (per browser, no account).
+- **Deine Favoriten** — for each favorite: the cheapest retailer this week, all offers across stores, and a basket/savings summary.
+- **Data-not-ready state** — if the week's data is missing or expired, the app shows a clear "wird vorbereitet" notice instead of stale prices.
 
-## The data source (the important part)
+## Admin panel (`/admin`)
 
-`data/offers.json` is produced by an **adapter**. Swapping the source never touches the frontend.
+- Shows **data readiness** for a region (ready / stale / none), offer + brochure + retailer counts, validity and last-run time.
+- **"Daten jetzt extrahieren"** runs `scripts/fetch-kaufda.js` and streams its live log.
+- Dev tool: `server.js` binds to `127.0.0.1` and has **no auth** — don't expose it to the internet as-is.
 
-- `scripts/adapters/seed.js` — realistic sample prices (active by default).
-- `scripts/adapters/marktguru.js` — **scaffold** for a real live source. Not enabled.
+### Schedule it weekly (instead of the admin button)
 
-```bash
-SOURCE=seed node scripts/fetch-offers.js       # default
-SOURCE=marktguru node scripts/fetch-offers.js  # once you implement + review ToS
-```
-
-**Honest caveats for going live:** German offer aggregators (marktguru, kaufDA, meinprospekt) generally **forbid scraping** in their terms, and their pages change often and will break scrapers. Prefer an official/licensed API where possible. The adapter boundary + validation in `fetch-offers.js` is built so a failed/garbage run **won't overwrite good data**.
-
-### Schedule it every 24h
-
-- **Windows (Task Scheduler):** run `node scripts/fetch-offers.js` daily in this folder.
-- **Linux/macOS (cron):** `0 6 * * * cd /path/to/sparfuchs && node scripts/fetch-offers.js`
-- **CI:** a daily GitHub Action that runs the fetch and commits/deploys the JSON.
+- **Windows (Task Scheduler):** run `node scripts/fetch-kaufda.js` weekly in this folder.
+- **Linux/macOS (cron):** `0 6 * * 1 cd /path/to/sparfuchs && node scripts/fetch-kaufda.js`
+- **CI:** a weekly GitHub Action that runs the fetch and commits/deploys the JSON.
 
 ## Real data: the kaufDA pipeline (Berlin 10178)
 
@@ -102,9 +89,10 @@ references image URLs (never downloads/rehosts images)**. A public launch would 
 ## Roadmap
 
 - [x] Real data source (kaufDA, Berlin 10178) — brochure-offers API, ~3,800 offers, saved to `data/kaufda/`
-- [x] Surface kaufDA offers in the frontend (real/demo toggle + free-text search)
+- [x] User app: search real products, ★-favorite them locally, cheapest-per-favorite comparison
+- [x] Data-not-ready state when the week's offers are missing/expired
+- [x] Admin panel to run the extraction + report data readiness (`/admin`)
 - [ ] Load offers into Postgres with full-text search; schedule weekly
 - [ ] Expand beyond 10178 (add zips to `config/locations.json`)
 - [ ] Weekly notification when favorites hit their cheapest (channel TBD — email is simplest)
-- [ ] Real store-locator data per chain (current branches are a Munich/Berlin sample)
-- [ ] Postal-code entry as a fallback to GPS
+- [ ] Auth on the admin panel before any non-local deployment

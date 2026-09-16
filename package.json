@@ -4,8 +4,8 @@
   "description": "Compare weekly German supermarket offers and find the cheapest / closest store for your favorite products.",
   "private": true,
   "scripts": {
-    "fetch": "node scripts/fetch-offers.js",
-    "serve": "node scripts/serve.js",
-    "start": "npm run fetch && npm run serve"
+    "fetch": "node scripts/fetch-kaufda.js",
+    "serve": "node scripts/server.js",
+    "start": "node scripts/server.js"
   }
 }

@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>SparFuchs — Wöchentliche Supermarkt-Angebote vergleichen</title>
-  <meta name="description" content="Wähle deine Lieblingsprodukte und finde jede Woche den günstigsten Supermarkt in deiner Nähe." />
+  <meta name="description" content="Suche echte Supermarkt-Angebote in deiner Region, markiere deine Lieblingsprodukte und finde jede Woche den günstigsten Markt." />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦊</text></svg>" />
   <link rel="stylesheet" href="css/styles.css" />
 </head>
@@ -18,75 +18,38 @@
           <div class="brand-tag">Günstigster Supermarkt der Woche</div>
         </div>
       </div>
-      <div class="week-badge" id="weekBadge">Angebotswoche wird geladen…</div>
+      <div class="week-badge" id="weekBadge">lädt…</div>
     </div>
   </header>
 
   <main class="wrap">
+    <!-- data readiness banner -->
+    <div id="statusBanner"></div>
 
-    <!-- STEP 1: favorites -->
+    <!-- search real products -->
     <section class="panel">
       <div class="panel-head">
-        <h2>Deine Lieblingsprodukte</h2>
-        <span class="muted" id="favCount">0 ausgewählt</span>
+        <h2>Produkte suchen</h2>
+        <span class="muted small">echte Angebote · <span id="regionLabel">–</span></span>
       </div>
-      <input id="search" class="search" type="search" placeholder="Produkt suchen … (z. B. Monster, Milch, Hähnchen)" autocomplete="off" />
-      <div id="catalog" class="catalog-grid"></div>
+      <input id="search" class="search" type="search" placeholder="Produkt suchen … (z. B. Monster, Joghurt, Kaffee, Barilla)" autocomplete="off" />
+      <div id="searchResults" class="results"></div>
     </section>
 
-    <!-- STEP 2: location + strategy (demo mode only) -->
-    <section class="panel" id="locPanel">
-      <div class="panel-head">
-        <h2>Standort &amp; Priorität</h2>
-        <span class="muted small">Demo-Modus</span>
-      </div>
-      <div class="loc-row">
-        <input id="plzInput" class="plz" inputmode="numeric" maxlength="5" placeholder="PLZ (z. B. 80331)" autocomplete="postal-code" />
-        <button id="plzBtn" class="btn">Übernehmen</button>
-        <button id="locBtn" class="btn ghost">📍 GPS</button>
-      </div>
-      <div class="loc-row">
-        <span class="muted small">Schnellauswahl:</span>
-        <button class="btn ghost city" data-lat="48.1372" data-lng="11.5756" data-label="München">München</button>
-        <button class="btn ghost city" data-lat="52.5200" data-lng="13.4050" data-label="Berlin">Berlin</button>
-      </div>
-      <div id="locStatus" class="muted">Ohne Standort zeigen wir den bundesweit günstigsten Preis.</div>
-      <div class="strategy" id="strategy">
-        <label class="strat-opt">
-          <input type="radio" name="strat" value="cheapest" checked />
-          <span><strong>Günstigster Preis</strong><small>Bester Preis, egal welcher Markt</small></span>
-        </label>
-        <label class="strat-opt is-locked" data-lock="1">
-          <input type="radio" name="strat" value="nearest" disabled />
-          <span><strong>Nächster Markt</strong><small>Preise im nächstgelegenen Laden</small></span>
-        </label>
-        <label class="strat-opt is-locked" data-lock="1">
-          <input type="radio" name="strat" value="balanced" disabled />
-          <span><strong>Beste Wahl in der Nähe</strong><small>Günstigster unter deinen 3 nächsten Märkten</small></span>
-        </label>
-      </div>
-      <div id="nearby" class="nearby hidden"></div>
-    </section>
-
-    <!-- STEP 3: results -->
+    <!-- user favorites -->
     <section class="panel">
       <div class="panel-head">
-        <h2>Beste Preise diese Woche</h2>
-        <div class="modetoggle" id="modeToggle" role="tablist">
-          <button type="button" data-mode="real" class="mt on">Echte Angebote</button>
-          <button type="button" data-mode="demo" class="mt">Demo</button>
-        </div>
+        <h2>Deine Favoriten</h2>
+        <span class="muted" id="favCount">0 gespeichert</span>
       </div>
-      <div id="realContext" class="realctx hidden"></div>
-      <div id="summary" class="summary hidden"></div>
-      <div id="results" class="results"></div>
+      <div id="favSummary" class="summary hidden"></div>
+      <div id="favResults" class="results"></div>
     </section>
-
   </main>
 
   <footer class="wrap foot">
     <p id="dataMeta" class="muted"></p>
-    <p class="muted small">Demo mit Beispieldaten für Deutschland. Preise dienen nur zur Veranschaulichung. · <span id="notifyNote">Wöchentliche Benachrichtigungen: geplant.</span></p>
+    <p class="muted small">Echte Prospekt-Angebote via kaufDA · nur zur Veranschaulichung · Favoriten werden lokal in deinem Browser gespeichert.</p>
   </footer>
 
   <script src="js/app.js"></script>

@@ -4,7 +4,7 @@
     {
       "name": "sparfuchs",
       "runtimeExecutable": "node",
-      "runtimeArgs": ["scripts/serve.js"],
+      "runtimeArgs": ["scripts/server.js"],
       "port": 4173
     }
   ]
