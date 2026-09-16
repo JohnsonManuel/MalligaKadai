@@ -20,13 +20,21 @@ function connectionString() {
   } catch { return null; }
 }
 
+// Drop sslmode/ssl from the URL so we control TLS via the ssl config below.
+// (With sslmode in the string, pg enforces full cert verification and rejects
+//  Aiven's self-signed CA chain.)
+function stripSslParams(cs) {
+  try { const u = new URL(cs); ["sslmode", "ssl", "uselibpqcompat"].forEach((k) => u.searchParams.delete(k)); return u.toString(); }
+  catch { return cs; }
+}
+
 let _pool = null;
 function getPool() {
   if (_pool) return _pool;
   const cs = connectionString();
   if (!cs) return null;
-  // Aiven requires TLS; we don't ship their CA here, so don't verify the chain.
-  _pool = new Pool({ connectionString: cs, ssl: { rejectUnauthorized: false }, max: 4, connectionTimeoutMillis: 8000 });
+  // Aiven requires TLS; we don't ship their CA here, so encrypt without verifying the chain.
+  _pool = new Pool({ connectionString: stripSslParams(cs), ssl: { require: true, rejectUnauthorized: false }, max: 4, connectionTimeoutMillis: 8000 });
   _pool.on("error", () => {}); // don't let idle-client errors crash the process
   return _pool;
 }
