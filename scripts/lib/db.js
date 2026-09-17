@@ -153,7 +153,7 @@ async function status(zip) {
   const today = new Date().toISOString().slice(0, 10);
   const vu = ext.valid_until ? new Date(ext.valid_until).toISOString().slice(0, 10) : null;
   return {
-    configured: true, exists: true,
+    configured: true, exists: true, source: "db",
     ready: !!vu && vu >= today,
     weekOf: ext.week_of ? new Date(ext.week_of).toISOString().slice(0, 10) : null,
     generatedAt: ext.generated_at, validUntil: ext.valid_until,
