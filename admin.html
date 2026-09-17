@@ -7,89 +7,107 @@
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛠️</text></svg>" />
   <link rel="stylesheet" href="css/styles.css" />
   <style>
-    .admin { max-width: 760px; margin: 0 auto; padding: 0 16px; }
-    .status-grid { display: flex; flex-wrap: wrap; gap: 10px; margin: 14px 0; }
-    .badge-big { display: inline-flex; align-items: center; gap: 8px; font-weight: 800; font-size: 15px; padding: 8px 14px; border-radius: 999px; }
-    .badge-ready { background: var(--save-bg); color: var(--save); }
-    .badge-stale { background: color-mix(in srgb, var(--primary) 12%, var(--surface)); color: var(--primary-ink); }
-    .kv { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; font-size: 13.5px; margin: 10px 0; }
-    .kv dt { color: var(--muted); }
-    .kv dd { margin: 0; font-weight: 600; }
-    .logbox { background: #0e1013; color: #cbd3da; font-family: ui-monospace, "Cascadia Code", Menlo, monospace; font-size: 12px; line-height: 1.5; border-radius: 12px; padding: 12px 14px; height: 320px; overflow: auto; white-space: pre-wrap; border: 1px solid var(--line); }
-    .row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-    select { padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); color: var(--ink); font-size: 14px; }
+    .admin { max-width: 780px; margin: 0 auto; padding: 0 16px; }
+    .logbox { background: #0e1013; color: #cbd3da; font-family: ui-monospace, "Cascadia Code", Menlo, monospace; font-size: 12px; line-height: 1.5; border-radius: 12px; padding: 12px 14px; height: 260px; overflow: auto; white-space: pre-wrap; border: 1px solid var(--line); margin-top: 12px; }
+    .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .plz { width: 150px; padding: 9px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); color: var(--ink); font-size: 15px; }
     .btn[disabled] { opacity: .55; cursor: not-allowed; }
-    .spin { width: 14px; height: 14px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; display: inline-block; animation: sp .7s linear infinite; }
+    .spin { width: 14px; height: 14px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; display: inline-block; animation: sp .7s linear infinite; vertical-align: -2px; }
     @keyframes sp { to { transform: rotate(360deg); } }
+    .region { display: flex; align-items: center; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--line); }
+    .region:last-child { border-bottom: 0; }
+    .rinfo { flex: 1; min-width: 0; }
+    .rzip { font-weight: 700; font-size: 14px; }
+    .rmeta { font-size: 12px; color: var(--muted); }
+    .rbadge { font-size: 11px; font-weight: 800; padding: 3px 8px; border-radius: 999px; white-space: nowrap; }
+    .rbadge.ok { background: var(--save-bg); color: var(--save); }
+    .rbadge.warn { background: color-mix(in srgb, var(--primary) 12%, var(--surface)); color: var(--primary-ink); }
+    .rrefresh { padding: 6px 10px; font-size: 13px; }
+    .hint { font-size: 12.5px; color: var(--primary-ink); min-height: 1.2em; }
+    .dbline { font-size: 12.5px; margin-top: 6px; }
+    .dbok { color: var(--save); } .dberr { color: var(--primary-ink); }
+    code { background: var(--bg); padding: 1px 5px; border-radius: 5px; }
   </style>
 </head>
 <body>
   <header class="topbar"><div class="wrap topbar-inner">
     <div class="brand"><span class="brand-logo">🛠️</span><div>
       <div class="brand-name">SparFuchs · Admin</div>
-      <div class="brand-tag">Wöchentliche Daten-Extraktion</div>
+      <div class="brand-tag">Regionen &amp; Daten-Extraktion</div>
     </div></div>
     <a class="week-badge" href="/" style="text-decoration:none">← Zur App</a>
   </div></header>
 
   <main class="admin">
     <section class="panel">
-      <div class="panel-head"><h2>Datenstatus</h2><span id="badge"></span></div>
-      <div class="row" style="margin-bottom:12px">
-        <label>Region:</label>
-        <select id="zip"></select>
+      <div class="panel-head"><h2>Neue Region laden</h2></div>
+      <p class="muted small">Gib eine deutsche Postleitzahl ein. Wir ermitteln den Ort, holen die aktuellen kaufDA-Angebote und laden sie in die Datenbank. Dauert ~30–60&nbsp;Sekunden.</p>
+      <div class="row" style="margin:12px 0 4px">
+        <input id="plz" class="plz" inputmode="numeric" maxlength="5" placeholder="PLZ (z. B. 20095)" autocomplete="postal-code" />
+        <button id="run" class="btn">▶ Region laden</button>
+        <span id="runState" class="muted small"></span>
       </div>
-      <dl class="kv" id="kv"></dl>
+      <div id="hint" class="hint"></div>
+      <div id="dbline" class="dbline"></div>
+      <div id="logbox" class="logbox">Noch kein Lauf in dieser Sitzung.</div>
     </section>
 
     <section class="panel">
-      <div class="panel-head"><h2>Extraktion ausführen</h2></div>
-      <p class="muted small">Holt die aktuellen Prospekt-Angebote von kaufDA für die gewählte Region und schreibt <code>data/kaufda/&lt;PLZ&gt;/offers-latest.json</code>. Dauert ~30–60&nbsp;Sekunden.</p>
-      <div class="row" style="margin:12px 0">
-        <button id="run" class="btn">▶ Daten jetzt extrahieren</button>
-        <span id="runState" class="muted small"></span>
-      </div>
-      <div id="logbox" class="logbox">Noch kein Lauf in dieser Sitzung.</div>
+      <div class="panel-head"><h2>Geladene Regionen</h2><span class="muted small" id="regCount"></span></div>
+      <div id="regions"><span class="muted small">lädt…</span></div>
     </section>
   </main>
 
   <script>
     const $ = (s) => document.querySelector(s);
     const esc = (s) => (s || "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+    const fmt = (d) => { try { return new Date(d).toLocaleString("de-DE"); } catch { return "—"; } };
     let pollTimer = null;
+    let loadedZips = new Set();
 
-    function fmt(d) { try { return new Date(d).toLocaleString("de-DE"); } catch { return "—"; } }
+    async function refreshRegions() {
+      const r = await fetch("/api/regions").then((x) => x.json());
+      loadedZips = new Set(r.regions.map((x) => x.zip));
+      $("#regCount").textContent = r.regions.length ? `${r.regions.length} Region(en)` : "";
+      $("#dbline").innerHTML = r.dbError
+        ? `<span class="dberr">⚠ Datenbank nicht erreichbar — ${esc(r.dbError)}</span>`
+        : (r.configured ? `<span class="dbok">✓ Postgres verbunden</span>` : `<span class="muted">Keine Datenbank konfiguriert (Datei-Fallback).</span>`);
 
-    async function refreshStatus() {
-      const zip = $("#zip").value || "";
-      const r = await fetch("/api/status" + (zip ? "?zip=" + zip : "")).then((x) => x.json());
-      // populate zip options once
-      if (!$("#zip").options.length) {
-        r.locations.forEach((z) => { const o = document.createElement("option"); o.value = z; o.textContent = z; $("#zip").appendChild(o); });
-        $("#zip").value = r.zip;
+      const box = $("#regions");
+      if (!r.regions.length) { box.innerHTML = `<span class="muted small">Noch keine Region geladen. Gib oben eine PLZ ein.</span>`; }
+      else {
+        box.innerHTML = r.regions.sort((a, b) => a.zip.localeCompare(b.zip)).map((x) => `
+          <div class="region">
+            <div class="rinfo">
+              <div class="rzip">${esc(x.zip)} · ${esc(x.city || "")}</div>
+              <div class="rmeta">${x.offerCount} Angebote · ${x.brochureCount ?? "?"} Prospekte / ${x.retailers ?? "?"} Händler · gültig bis ${x.validUntil ? String(x.validUntil).slice(0,10) : "—"} · Stand ${fmt(x.generatedAt)}</div>
+            </div>
+            <span class="rbadge ${x.ready ? "ok" : "warn"}">${x.ready ? "bereit" : "veraltet"}</span>
+            <button class="btn ghost rrefresh" data-zip="${esc(x.zip)}" ${job() ? "disabled" : ""}>↻ Aktualisieren</button>
+          </div>`).join("");
+        box.querySelectorAll(".rrefresh").forEach((b) => b.addEventListener("click", () => startExtract(b.dataset.zip)));
       }
-      const d = r.data;
-      const badge = $("#badge");
-      if (!d.exists) badge.innerHTML = `<span class="badge-big badge-stale">⚠ Keine Daten</span>`;
-      else if (d.ready) badge.innerHTML = `<span class="badge-big badge-ready">✓ Woche bereit</span>`;
-      else badge.innerHTML = `<span class="badge-big badge-stale">⚠ Veraltet / nicht bereit</span>`;
+      updateHint();
+    }
 
-      const dbLine = r.dbError
-        ? `<dt>Datenbank</dt><dd style="color:var(--primary-ink)">⚠ nicht erreichbar — ${esc(r.dbError)}</dd>`
-        : `<dt>Datenbank</dt><dd>${d.source === "db" ? "✓ Postgres verbunden" : "— (Datei-Fallback aktiv)"}</dd>`;
-      $("#kv").innerHTML = (d.exists ? `
-        <dt>Bereit für diese Woche</dt><dd>${d.ready ? "Ja" : "Nein — bitte neu extrahieren"}</dd>
-        <dt>Angebote</dt><dd>${d.offerCount ?? "—"}</dd>
-        <dt>Prospekte / Händler</dt><dd>${d.brochureCount ?? "—"} / ${d.retailers ?? "—"}</dd>
-        <dt>Gültig bis</dt><dd>${d.validUntil ? String(d.validUntil).slice(0,10) : "—"}</dd>
-        <dt>Zuletzt erzeugt</dt><dd>${fmt(d.generatedAt)}</dd>`
-        : `<dt>Status</dt><dd>Für diese Region wurden noch keine Daten extrahiert.</dd>`) + dbLine;
+    const job = () => !!pollTimer;
 
-      // reflect running job
-      const running = r.job.running;
-      $("#run").disabled = running;
-      $("#runState").innerHTML = running ? `<span class="spin"></span> Extraktion läuft…` : (r.job.finishedAt ? `Letzter Lauf: ${r.job.ok ? "✓ erfolgreich" : "✗ Fehler"} · ${fmt(r.job.finishedAt)}` : "");
-      if (running && !pollTimer) startPolling();
+    function updateHint() {
+      const plz = ($("#plz").value || "").trim();
+      const loaded = loadedZips.has(plz);
+      $("#run").textContent = loaded ? "↻ Aktualisieren" : "▶ Region laden";
+      $("#hint").textContent = (/^\d{5}$/.test(plz) && loaded) ? "Diese Region ist bereits geladen — wird aktualisiert (neue Woche)." : "";
+    }
+
+    async function startExtract(zip) {
+      if (job()) return;
+      $("#run").disabled = true;
+      document.querySelectorAll(".rrefresh").forEach((b) => (b.disabled = true));
+      $("#runState").innerHTML = `<span class="spin"></span> Starte ${esc(zip)}…`;
+      const res = await fetch("/api/extract?zip=" + encodeURIComponent(zip), { method: "POST" });
+      if (res.status === 400) { const e = await res.json(); $("#runState").textContent = "✗ " + (e.error || "ungültige PLZ"); $("#run").disabled = false; return; }
+      if (res.status === 409) { $("#runState").textContent = "Es läuft bereits eine Extraktion."; }
+      startPolling();
     }
 
     async function refreshLog() {
@@ -97,20 +115,21 @@
       const box = $("#logbox");
       box.textContent = r.log || "(kein Log)";
       box.scrollTop = box.scrollHeight;
-      if (!r.running) { clearInterval(pollTimer); pollTimer = null; refreshStatus(); }
+      $("#runState").innerHTML = r.running ? `<span class="spin"></span> Extraktion läuft (${esc(r.zip || "")})…` : (r.finishedAt ? `Letzter Lauf: ${r.ok ? "✓ erfolgreich" : "✗ Fehler"}` : "");
+      if (!r.running) { clearInterval(pollTimer); pollTimer = null; $("#run").disabled = false; refreshRegions(); }
     }
     function startPolling() { if (pollTimer) return; pollTimer = setInterval(refreshLog, 1200); refreshLog(); }
 
-    $("#run").addEventListener("click", async () => {
-      $("#run").disabled = true; $("#runState").innerHTML = `<span class="spin"></span> Starte…`;
-      const res = await fetch("/api/extract?zip=" + encodeURIComponent($("#zip").value), { method: "POST" });
-      if (res.status === 409) { $("#runState").textContent = "Es läuft bereits eine Extraktion."; }
-      startPolling();
+    $("#run").addEventListener("click", () => {
+      const plz = ($("#plz").value || "").trim();
+      if (!/^\d{5}$/.test(plz)) { $("#hint").textContent = "Bitte eine 5-stellige PLZ eingeben."; return; }
+      startExtract(plz);
     });
-    $("#zip").addEventListener("change", refreshStatus);
+    $("#plz").addEventListener("input", updateHint);
+    $("#plz").addEventListener("keydown", (e) => { if (e.key === "Enter") $("#run").click(); });
 
-    refreshStatus();
-    setInterval(() => { if (!pollTimer) refreshStatus(); }, 8000);
+    refreshRegions();
+    setInterval(() => { if (!job()) refreshRegions(); }, 10000);
   </script>
 </body>
 </html>

@@ -15,6 +15,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawn } = require("child_process");
 const db = require("./lib/db");
+const geocode = require("./lib/geocode");
 
 const ROOT = path.join(__dirname, "..");
 const PORT = process.env.PORT || 4173;
@@ -39,10 +40,10 @@ function readyOf(offers) {
   return { ready: !!until && until >= today, validUntil: until };
 }
 
-function runExtract(zip) {
-  job = { running: true, zip, log: `Starte Extraktion für ${zip} …\n`, startedAt: new Date().toISOString(), finishedAt: null, ok: null };
+function runExtract(loc) {
+  job = { running: true, zip: loc.zip, log: `Starte Extraktion für ${loc.zip} ${loc.city || ""} …\n`, startedAt: new Date().toISOString(), finishedAt: null, ok: null };
   const child = spawn(process.execPath, [path.join(ROOT, "scripts", "fetch-kaufda.js")], {
-    cwd: ROOT, env: { ...process.env, ZIP: zip }
+    cwd: ROOT, env: { ...process.env, ZIP: loc.zip, LAT: loc.lat || "", LNG: loc.lng || "", CITY: loc.city || "" }
   });
   const append = (b) => { job.log += b.toString(); if (job.log.length > 20000) job.log = job.log.slice(-20000); };
   child.stdout.on("data", append);
@@ -100,21 +101,33 @@ http.createServer(async (req, res) => {
       return sendJson(res, 200, { ...batch, source, configured: db.isConfigured(), ...readyOf(batch.offers) });
     }
 
+    // loaded regions (from the DB) — so the admin sees what's already there
+    if (p === "/api/regions") {
+      let regions = [], dbError = null;
+      try { if (db.isConfigured()) regions = await db.listRegions(); }
+      catch (e) { dbError = e.message; }
+      return sendJson(res, 200, { configured: db.isConfigured(), regions, dbError });
+    }
+
     if (p === "/api/extract/log") {
       return sendJson(res, 200, { running: job.running, zip: job.zip, ok: job.ok, startedAt: job.startedAt, finishedAt: job.finishedAt, log: job.log });
     }
 
+    // extract any German PLZ: geocode it, then run the pipeline + DB load
     if (p === "/api/extract" && req.method === "POST") {
       let body = "";
       req.on("data", (c) => (body += c));
-      req.on("end", () => {
+      req.on("end", async () => {
         let zip = url.searchParams.get("zip");
         try { if (!zip && body) zip = JSON.parse(body).zip; } catch {}
-        zip = zip || locations.default;
-        if (!locations.locations[zip]) return sendJson(res, 400, { error: `unknown zip "${zip}"` });
+        zip = (zip || locations.default).trim();
+        if (!/^\d{5}$/.test(zip)) return sendJson(res, 400, { error: "PLZ muss 5-stellig sein" });
         if (job.running) return sendJson(res, 409, { error: "extraction already running", zip: job.zip });
-        runExtract(zip);
-        return sendJson(res, 202, { started: true, zip });
+        let loc = locations.locations[zip];
+        if (!loc) { loc = await geocode.geocodePlz(zip); }
+        if (!loc) return sendJson(res, 400, { error: `PLZ ${zip} konnte nicht gefunden werden` });
+        runExtract(loc);
+        return sendJson(res, 202, { started: true, zip: loc.zip, city: loc.city });
       });
       return;
     }

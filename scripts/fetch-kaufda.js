@@ -12,6 +12,7 @@ const fs = require("fs");
 const path = require("path");
 const kaufda = require("./adapters/kaufda");
 const db = require("./lib/db");
+const geocode = require("./lib/geocode");
 
 const ROOT = path.join(__dirname, "..");
 const DATA = path.join(ROOT, "data");
@@ -19,10 +20,15 @@ const locations = JSON.parse(fs.readFileSync(path.join(ROOT, "config/locations.j
 
 async function main() {
   const zip = process.env.ZIP || locations.default;
-  const loc = locations.locations[zip];
+  // Resolve the location: env-provided coords (from the server) → config → geocode the PLZ.
+  let loc = locations.locations[zip];
+  if (process.env.LAT && process.env.LNG) {
+    loc = { zip, city: process.env.CITY || (loc && loc.city) || zip, lat: process.env.LAT, lng: process.env.LNG };
+  }
   if (!loc) {
-    console.error(`Location "${zip}" not in config/locations.json. Options: ${Object.keys(locations.locations).join(", ")}`);
-    process.exit(1);
+    loc = await geocode.geocodePlz(zip);
+    if (!loc) { console.error(`Konnte PLZ "${zip}" nicht auflösen (ungültig?).`); process.exit(1); }
+    console.log(`  (PLZ ${zip} geokodiert → ${loc.city})`);
   }
 
   console.log(`→ kaufDA: enumerating brochures @ ${loc.zip} ${loc.city} …`);

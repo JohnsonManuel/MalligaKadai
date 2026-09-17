@@ -182,4 +182,20 @@ async function latestOffers(zip) {
   };
 }
 
-module.exports = { isConfigured, getPool, ensureSchema, saveExtraction, status, latestOffers };
+// One row per loaded region (the latest extraction), for the admin panel.
+async function listRegions() {
+  const pool = getPool();
+  if (!pool) return [];
+  await ensureSchema(pool);
+  const r = await pool.query(`
+    SELECT DISTINCT ON (zip) zip, city, generated_at, valid_until, offer_count, brochure_count, retailer_count
+    FROM sparfuchs_extractions ORDER BY zip, generated_at DESC`);
+  const today = new Date().toISOString().slice(0, 10);
+  return r.rows.map((x) => ({
+    zip: x.zip, city: x.city, generatedAt: x.generated_at, validUntil: x.valid_until,
+    offerCount: x.offer_count, brochureCount: x.brochure_count, retailers: x.retailer_count,
+    ready: !!x.valid_until && new Date(x.valid_until).toISOString().slice(0, 10) >= today
+  }));
+}
+
+module.exports = { isConfigured, getPool, ensureSchema, saveExtraction, status, latestOffers, listRegions };
