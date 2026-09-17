@@ -4,6 +4,8 @@
 const I18N = {
   de: {
     tagline: "Günstigster Supermarkt der Woche",
+    bestDeals: "Beste Deals diese Woche",
+    dealsSub: (n) => `Top ${n} Rabatte`,
     searchTitle: "Produkte suchen",
     realOffers: "echte Angebote",
     searchPlaceholder: "Produkt suchen … (z. B. Monster, Joghurt, Kaffee, Barilla)",
@@ -33,6 +35,8 @@ const I18N = {
   },
   en: {
     tagline: "Cheapest supermarket of the week",
+    bestDeals: "This week's best deals",
+    dealsSub: (n) => `Top ${n} markdowns`,
     searchTitle: "Search products",
     realOffers: "real offers",
     searchPlaceholder: "Search products … (e.g. Monster, yogurt, coffee, Barilla)",
@@ -92,7 +96,7 @@ const isFav = (key) => state.favorites.some((f) => f.key === key);
 function toggleFav(key, title) {
   const i = state.favorites.findIndex((f) => f.key === key);
   if (i >= 0) state.favorites.splice(i, 1); else state.favorites.push({ key, title });
-  saveFavorites(); renderSearch(); renderFavorites();
+  saveFavorites(); renderDeals(); renderSearch(); renderFavorites();
 }
 
 // ---- retailer visuals ----
@@ -112,6 +116,51 @@ function offersForKey(key) {
   const exact = pricedOffers().filter((o) => normTitle(o.productTitle) === key);
   const pool = exact.length ? exact : pricedOffers().filter((o) => (o.searchText || "").includes(key));
   return pool.sort((a, b) => a.price - b.price);
+}
+
+// ---- best deals (top markdowns this week) ----
+function bestDeals(n = 10) {
+  const seen = new Set();
+  const out = [];
+  const cand = pricedOffers()
+    .filter((o) => o.wasPrice && o.wasPrice > o.price)
+    .map((o) => ({ o, pct: Math.round((1 - o.price / o.wasPrice) * 100) }))
+    .sort((a, b) => b.pct - a.pct || (b.o.wasPrice - b.o.price) - (a.o.wasPrice - a.o.price));
+  for (const c of cand) {
+    const k = normTitle(c.o.productTitle) + "|" + c.o.retailer;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(c);
+    if (out.length >= n) break;
+  }
+  return out;
+}
+
+function renderDeals() {
+  const section = $("#dealsSection");
+  const row = $("#dealsRow");
+  const deals = state.ready ? bestDeals(10) : [];
+  if (!deals.length) { section.classList.add("hidden"); return; }
+  section.classList.remove("hidden");
+  $("#dealsTitle").textContent = t("bestDeals");
+  $("#dealsSub").textContent = t("dealsSub", deals.length);
+  row.innerHTML = "";
+  const frag = document.createDocumentFragment();
+  for (const { o, pct } of deals) {
+    const key = normTitle(o.productTitle);
+    const on = isFav(key);
+    const v = retailerVisual(o);
+    const card = document.createElement("div");
+    card.className = "deal-card" + (on ? " fav" : "");
+    card.innerHTML = `
+      <button class="dstar ${on ? "on" : ""}" title="${on ? t("removeFav") : t("addFav")}">${on ? "★" : "☆"}</button>
+      <div class="dtop">${chipHTML(v)}<span class="dpct">−${pct}%</span></div>
+      <div class="dtitle">${esc(o.productTitle)}</div>
+      <div class="dprice">${esc(o.priceFormatted) || eur(o.price)}<s>${eur(o.wasPrice)}</s></div>`;
+    card.querySelector(".dstar").addEventListener("click", () => toggleFav(key, o.productTitle));
+    frag.appendChild(card);
+  }
+  row.appendChild(frag);
 }
 
 // ---- search ----
@@ -267,7 +316,7 @@ function applyStatic() {
 function setLang(lang) {
   state.lang = lang;
   try { localStorage.setItem("sf_lang", lang); } catch {}
-  applyStatic(); renderStatus(); renderSearch(); renderFavorites();
+  applyStatic(); renderStatus(); renderDeals(); renderSearch(); renderFavorites();
 }
 
 // ---- boot ----
@@ -290,6 +339,7 @@ async function boot() {
 
   applyStatic();
   renderStatus();
+  renderDeals();
   renderSearch();
   renderFavorites();
 }
