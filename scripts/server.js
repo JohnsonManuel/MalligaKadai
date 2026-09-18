@@ -19,6 +19,8 @@ const geocode = require("./lib/geocode");
 
 const ROOT = path.join(__dirname, "..");
 const PORT = process.env.PORT || 4173;
+// Bind to all interfaces so a PaaS (Render, etc.) can route traffic; localhost still works.
+const HOST = process.env.HOST || "0.0.0.0";
 const locations = JSON.parse(fs.readFileSync(path.join(ROOT, "config/locations.json"), "utf8"));
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "88888888";
 const checkPw = (req) => (req.headers["x-admin-password"] || "") === ADMIN_PASSWORD;
@@ -152,4 +154,4 @@ http.createServer(async (req, res) => {
   } catch (e) {
     return sendJson(res, 500, { error: e.message });
   }
-}).listen(PORT, "127.0.0.1", () => console.log(`SparFuchs → http://localhost:${PORT}  (admin: http://localhost:${PORT}/admin)`));
+}).listen(PORT, HOST, () => console.log(`SparFuchs → listening on ${HOST}:${PORT}  (admin: /admin)`));

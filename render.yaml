@@ -1,0 +1,22 @@
+# Render Blueprint — free Node web service for SparFuchs.
+# In Render: New → Blueprint → connect this repo. Render reads this file, then
+# prompts you for the two secret env vars below (they are NOT stored in git).
+services:
+  - type: web
+    name: sparfuchs
+    runtime: node
+    plan: free
+    branch: main
+    buildCommand: npm install
+    startCommand: node scripts/server.js
+    healthCheckPath: /
+    autoDeploy: true
+    envVars:
+      # your Aiven Postgres connection string (Service URI). sync:false = set in dashboard.
+      - key: DATABASE_URL
+        sync: false
+      # admin password gating /admin + /api/extract. Pick a strong one here.
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: NODE_VERSION
+        value: "20"
