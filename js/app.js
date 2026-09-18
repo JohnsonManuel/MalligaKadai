@@ -76,6 +76,7 @@ const state = {
   lang: loadLang(),
   chains: new Map(),
   kaufda: null,
+  zip: null,
   ready: false,
   favorites: loadFavorites()
 };
@@ -320,25 +321,60 @@ function setLang(lang) {
   applyStatic(); renderStatus(); renderDeals(); renderSearch(); renderFavorites();
 }
 
+// ---- region switching ----
+const savedZip = () => { try { return localStorage.getItem("sf_zip") || ""; } catch { return ""; } };
+const saveZip = (z) => { try { localStorage.setItem("sf_zip", z); } catch {} };
+
+// load the latest offer batch for a region from the DB (via the server; credential stays server-side)
+async function loadOffers(zip) {
+  let k = null;
+  try { k = await fetch("/api/offers?zip=" + encodeURIComponent(zip), { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)); } catch {}
+  state.kaufda = (k && Array.isArray(k.offers) && k.offers.length) ? k : null;
+  state.zip = zip;
+  state.ready = computeReady();
+}
+
+function renderRegion() {
+  $("#regionLabel").textContent = state.kaufda ? `${state.kaufda.city} ${state.kaufda.zip}` : (state.zip || "–");
+  $("#dataMeta").textContent = state.kaufda
+    ? t("dataMeta", state.kaufda.offerCount, new Date(state.kaufda.generatedAt).toLocaleString(locale()))
+    : t("noData");
+}
+
+async function setRegion(zip) {
+  saveZip(zip);
+  await loadOffers(zip);
+  const sel = $("#regionSelect"); if (sel) sel.value = zip;
+  renderRegion(); renderStatus(); renderDeals(); renderSearch(); renderFavorites();
+}
+
 // ---- boot ----
 async function boot() {
   try {
     const stores = await fetch("data/stores.json").then((r) => r.json());
     (stores.chains || []).forEach((c) => state.chains.set(c.id, c));
   } catch {}
-  try {
-    const k = await fetch("/api/offers?zip=10178", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null));
-    if (k && Array.isArray(k.offers) && k.offers.length) state.kaufda = k;
-  } catch {}
 
-  state.ready = computeReady();
-  $("#regionLabel").textContent = state.kaufda ? `${state.kaufda.city} ${state.kaufda.zip}` : "–";
+  // populate the region switcher from the loaded regions (DB)
+  let regions = [];
+  try { const r = await fetch("/api/regions").then((x) => (x.ok ? x.json() : null)); regions = (r && r.regions) || []; } catch {}
+  const sel = $("#regionSelect");
+  sel.innerHTML = (regions.length ? regions : [{ zip: "10178", city: "Berlin" }])
+    .map((r) => `<option value="${esc(r.zip)}">${esc(r.zip)} · ${esc(r.city || "")}</option>`).join("");
+  const want = savedZip();
+  const initial = regions.find((r) => r.zip === want) ? want
+    : (regions.find((r) => r.zip === "10178") ? "10178" : (regions[0] ? regions[0].zip : "10178"));
+  sel.value = initial;
+  sel.addEventListener("change", () => setRegion(sel.value));
+
+  await loadOffers(initial);
 
   $("#search").addEventListener("input", renderSearch);
   document.querySelectorAll("#langToggle .lt").forEach((b) =>
     b.addEventListener("click", () => setLang(b.dataset.lang)));
 
   applyStatic();
+  renderRegion();
   renderStatus();
   renderDeals();
   renderSearch();

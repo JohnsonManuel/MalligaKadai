@@ -28,19 +28,6 @@ npm run fetch   # run the kaufDA extraction from the CLI (same as the admin butt
 
 Open <http://localhost:4173> (use the server, not the file directly).
 
-## Deploy (free — Render)
-
-[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/JohnsonManuel/MalligaKadai)
-
-1. Click the button (or Render → **New → Blueprint** → pick this repo). Render reads `render.yaml`.
-2. Set the two secrets it asks for:
-   - **`DATABASE_URL`** — your Aiven Postgres Service URI
-   - **`ADMIN_PASSWORD`** — a strong admin password (don't reuse `88888888`)
-3. **Deploy** → you get `https://<name>.onrender.com` (app) and `/admin`.
-
-Full walkthrough + notes in [`DEPLOY.md`](DEPLOY.md). (Free tier sleeps after ~15 min idle; the app
-reads offers from your Postgres and `/admin` is password-gated.)
-
 ## User app
 
 - **Search** the region's real offers; results group by product with the cheapest price + how many retailers carry it.
