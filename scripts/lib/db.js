@@ -40,7 +40,9 @@ function getPool() {
 }
 const isConfigured = () => !!connectionString();
 
+let _schemaEnsured = false;
 async function ensureSchema(pool) {
+  if (_schemaEnsured) return;   // run the DDL once per process, not per request
   await pool.query(`
     CREATE TABLE IF NOT EXISTS sparfuchs_extractions (
       id            BIGSERIAL PRIMARY KEY,
@@ -84,6 +86,7 @@ async function ensureSchema(pool) {
   await pool.query(`ALTER TABLE sparfuchs_offers ADD COLUMN IF NOT EXISTS store_name TEXT;`);
   await pool.query(`ALTER TABLE sparfuchs_offers ADD COLUMN IF NOT EXISTS store_address TEXT;`);
   await pool.query(`ALTER TABLE sparfuchs_offers ADD COLUMN IF NOT EXISTS store_distance NUMERIC(6,2);`);
+  _schemaEnsured = true;
 }
 
 const OFFER_COLS = [
@@ -177,7 +180,7 @@ async function latestOffers(zip) {
     `SELECT offer_id AS id, retailer, retailer_id AS "retailerId", chain_id AS "chainId",
             product_title AS "productTitle", description, price::float8 AS price, price_formatted AS "priceFormatted",
             was_price::float8 AS "wasPrice", unit_price AS "unitPrice", valid_from AS "validFrom",
-            valid_until AS "validUntil", brochure_id AS "brochureId", page, category, image_url AS "imageUrl", search_text AS "searchText",
+            valid_until AS "validUntil", brochure_id AS "brochureId", page, category, image_url AS "imageUrl",
             store_name AS "storeName", store_address AS "storeAddress", store_distance::float8 AS "storeDistance"
      FROM sparfuchs_offers WHERE extraction_id=$1 ORDER BY price NULLS LAST`, [ext.id]);
   return {

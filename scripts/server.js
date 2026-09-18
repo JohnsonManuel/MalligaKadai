@@ -14,6 +14,7 @@ const http = require("http");
 const fs = require("fs");
 const path = require("path");
 const { spawn } = require("child_process");
+const zlib = require("zlib");
 const db = require("./lib/db");
 const geocode = require("./lib/geocode");
 
@@ -56,7 +57,21 @@ function runExtract(loc) {
   child.on("error", (err) => { job.running = false; job.finishedAt = new Date().toISOString(); job.ok = false; job.log += `\nFehler: ${err.message}\n`; });
 }
 
-function sendJson(res, code, obj) { res.writeHead(code, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" }); res.end(JSON.stringify(obj)); }
+function sendJson(res, code, obj, req) {
+  const body = Buffer.from(JSON.stringify(obj));
+  const headers = { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" };
+  const ae = (req && req.headers["accept-encoding"]) || "";
+  if (/\bgzip\b/.test(ae) && body.length > 1024) {
+    const gz = zlib.gzipSync(body);
+    headers["Content-Encoding"] = "gzip";
+    headers["Vary"] = "Accept-Encoding";
+    res.writeHead(code, headers);
+    res.end(gz);
+  } else {
+    res.writeHead(code, headers);
+    res.end(body);
+  }
+}
 
 function serveStatic(req, res) {
   let urlPath = decodeURIComponent(req.url.split("?")[0]);
@@ -101,8 +116,8 @@ http.createServer(async (req, res) => {
       let batch = null, source = "db";
       if (db.isConfigured()) { try { const b = await db.latestOffers(zip); if (b && b.offers.length) batch = b; } catch {} }
       if (!batch) { const f = fileBatch(zip); if (f) { batch = f; source = "file"; } }
-      if (!batch) return sendJson(res, 200, { zip, ready: false, configured: db.isConfigured(), offers: [] });
-      return sendJson(res, 200, { ...batch, source, configured: db.isConfigured(), ...readyOf(batch.offers) });
+      if (!batch) return sendJson(res, 200, { zip, ready: false, configured: db.isConfigured(), offers: [] }, req);
+      return sendJson(res, 200, { ...batch, source, configured: db.isConfigured(), ...readyOf(batch.offers) }, req);
     }
 
     // loaded regions (from the DB) — so the admin sees what's already there
@@ -154,4 +169,8 @@ http.createServer(async (req, res) => {
   } catch (e) {
     return sendJson(res, 500, { error: e.message });
   }
-}).listen(PORT, HOST, () => console.log(`SparFuchs → listening on ${HOST}:${PORT}  (admin: /admin)`));
+}).listen(PORT, HOST, async () => {
+  console.log(`SparFuchs → listening on ${HOST}:${PORT}  (admin: /admin)`);
+  // warm the DB connection + ensure schema once, so the first request is fast
+  try { if (db.isConfigured()) await db.ensureSchema(db.getPool()); } catch (e) { console.warn("schema warmup:", e.message); }
+});

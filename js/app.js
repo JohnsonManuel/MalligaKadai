@@ -325,11 +325,24 @@ function setLang(lang) {
 const savedZip = () => { try { return localStorage.getItem("sf_zip") || ""; } catch { return ""; } };
 const saveZip = (z) => { try { localStorage.setItem("sf_zip", z); } catch {} };
 
+// in-memory cache so switching back to an already-loaded region is instant
+const regionCache = {};
+
 // load the latest offer batch for a region from the DB (via the server; credential stays server-side)
 async function loadOffers(zip) {
+  if (regionCache[zip]) { state.kaufda = regionCache[zip]; state.zip = zip; state.ready = computeReady(); return; }
   let k = null;
-  try { k = await fetch("/api/offers?zip=" + encodeURIComponent(zip), { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)); } catch {}
-  state.kaufda = (k && Array.isArray(k.offers) && k.offers.length) ? k : null;
+  try { k = await fetch("/api/offers?zip=" + encodeURIComponent(zip)).then((r) => (r.ok ? r.json() : null)); } catch {}
+  if (k && Array.isArray(k.offers) && k.offers.length) {
+    // searchText is rebuilt client-side (kept off the wire to shrink the payload)
+    for (const o of k.offers) {
+      if (!o.searchText) o.searchText = [o.productTitle, o.description, o.category, o.retailer].filter(Boolean).join(" ").toLowerCase();
+    }
+    state.kaufda = k;
+    regionCache[zip] = k;
+  } else {
+    state.kaufda = null;
+  }
   state.zip = zip;
   state.ready = computeReady();
 }
@@ -359,11 +372,18 @@ async function boot() {
   let regions = [];
   try { const r = await fetch("/api/regions").then((x) => (x.ok ? x.json() : null)); regions = (r && r.regions) || []; } catch {}
   const sel = $("#regionSelect");
-  sel.innerHTML = (regions.length ? regions : [{ zip: "10178", city: "Berlin" }])
-    .map((r) => `<option value="${esc(r.zip)}">${esc(r.zip)} · ${esc(r.city || "")}</option>`).join("");
   const want = savedZip();
-  const initial = regions.find((r) => r.zip === want) ? want
-    : (regions.find((r) => r.zip === "10178") ? "10178" : (regions[0] ? regions[0].zip : "10178"));
+  let initial;
+  if (regions.length) {
+    sel.innerHTML = regions.map((r) => `<option value="${esc(r.zip)}">${esc(r.zip)} · ${esc(r.city || "")}</option>`).join("");
+    initial = regions.find((r) => r.zip === want) ? want
+      : (regions.find((r) => r.zip === "10178") ? "10178" : regions[0].zip);
+  } else {
+    // regions list didn't load (cold start / DB slow): keep the saved region so we don't lose it
+    const zips = [...new Set([want, "10178"].filter(Boolean))];
+    sel.innerHTML = zips.map((z) => `<option value="${esc(z)}">${esc(z)}</option>`).join("");
+    initial = want || "10178";
+  }
   sel.value = initial;
   sel.addEventListener("change", () => setRegion(sel.value));
 
