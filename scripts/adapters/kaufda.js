@@ -84,6 +84,23 @@ async function listBrochures(loc) {
   return [...map.values()];
 }
 
+// The store nearest to the location that carries this brochure (name + address).
+async function nearestStore(contentId, loc) {
+  try {
+    const url = `https://content-viewer-be.kaufda.de/v1/nearestStore?lat=${loc.lat}&lng=${loc.lng}&brochureId=${contentId}&partner=kaufda_web&brochureKey=`;
+    const r = await fetch(url, { headers: API_HEADERS, signal: AbortSignal.timeout(15000) });
+    if (!r.ok) return null;
+    const s = await r.json();
+    if (!s || !s.name) return null;
+    const address = [
+      [s.street, s.streetNumber].filter(Boolean).join(" "),
+      [s.zip, s.city].filter(Boolean).join(" ")
+    ].filter(Boolean).join(", ");
+    return { name: s.name, address, city: s.city || null, zip: s.zip || null,
+      distanceKm: typeof s.distance === "number" ? Math.round(s.distance * 10) / 10 : null };
+  } catch { return null; }
+}
+
 // All offers in one brochure (paginated; the API caps a page at `size`).
 async function offersForBrochure(contentId, loc, { size = 200, maxPages = 6 } = {}) {
   const all = [];
@@ -132,6 +149,9 @@ function normalizeOffer(o, brochure) {
     validFrom: brochure.validFrom,
     validUntil: brochure.validUntil,
     category,
+    storeName: brochure.store ? brochure.store.name : null,
+    storeAddress: brochure.store ? brochure.store.address : null,
+    storeDistance: brochure.store ? brochure.store.distanceKm : null,
     imageUrl: (p.images && p.images[0] && p.images[0].url) || (o.image && o.image.url) || null,
     // lower-cased haystack for the app's free-text / favorite matching
     searchText: [title, desc, category, o.publisher && o.publisher.name].filter(Boolean).join(" ").toLowerCase()
@@ -148,6 +168,7 @@ async function fetchForLocation(loc, { delayMs = 500, onProgress } = {}) {
   for (const b of brochures) {
     await sleep(delayMs);
     try {
+      b.store = await nearestStore(b.contentId, loc);   // branch name + address for this flyer
       const raw = await offersForBrochure(b.contentId, loc);
       let added = 0;
       for (const o of raw) {

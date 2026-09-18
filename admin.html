@@ -42,6 +42,17 @@
   </div></header>
 
   <main class="admin">
+    <section class="panel" id="gate">
+      <div class="panel-head"><h2>Admin-Zugang</h2></div>
+      <p class="muted small">Bitte Passwort eingeben, um den Admin-Bereich zu nutzen.</p>
+      <div class="row" style="margin-top:12px">
+        <input id="pw" class="plz" type="password" inputmode="numeric" placeholder="Passwort" autocomplete="current-password" />
+        <button id="unlock" class="btn">Entsperren</button>
+        <span id="gateMsg" class="muted small"></span>
+      </div>
+    </section>
+
+    <div id="adminContent" class="hidden">
     <section class="panel">
       <div class="panel-head"><h2>Neue Region laden</h2></div>
       <p class="muted small">Gib eine deutsche Postleitzahl ein. Wir ermitteln den Ort, holen die aktuellen kaufDA-Angebote und laden sie in die Datenbank. Dauert ~30–60&nbsp;Sekunden.</p>
@@ -59,6 +70,7 @@
       <div class="panel-head"><h2>Geladene Regionen</h2><span class="muted small" id="regCount"></span></div>
       <div id="regions"><span class="muted small">lädt…</span></div>
     </section>
+    </div>
   </main>
 
   <script>
@@ -67,6 +79,16 @@
     const fmt = (d) => { try { return new Date(d).toLocaleString("de-DE"); } catch { return "—"; } };
     let pollTimer = null;
     let loadedZips = new Set();
+    const pw = () => sessionStorage.getItem("sf_admin_pw") || "";
+
+    function showContent() { $("#gate").classList.add("hidden"); $("#adminContent").classList.remove("hidden"); refreshRegions(); }
+    function lock() { sessionStorage.removeItem("sf_admin_pw"); $("#adminContent").classList.add("hidden"); $("#gate").classList.remove("hidden"); }
+    async function tryUnlock(candidate, silent) {
+      const r = await fetch("/api/admin/verify", { method: "POST", headers: { "x-admin-password": candidate } }).then((x) => x.json()).catch(() => ({ ok: false }));
+      if (r.ok) { sessionStorage.setItem("sf_admin_pw", candidate); $("#gateMsg").textContent = ""; showContent(); }
+      else if (silent) { lock(); }
+      else { $("#gateMsg").textContent = "Falsches Passwort."; }
+    }
 
     async function refreshRegions() {
       const r = await fetch("/api/regions").then((x) => x.json());
@@ -107,7 +129,8 @@
       $("#run").disabled = true;
       document.querySelectorAll(".rrefresh").forEach((b) => (b.disabled = true));
       $("#runState").innerHTML = `<span class="spin"></span> Starte ${esc(zip)}…`;
-      const res = await fetch("/api/extract?zip=" + encodeURIComponent(zip), { method: "POST" });
+      const res = await fetch("/api/extract?zip=" + encodeURIComponent(zip), { method: "POST", headers: { "x-admin-password": pw() } });
+      if (res.status === 401) { $("#runState").textContent = "✗ Passwort ungültig — bitte neu entsperren."; $("#run").disabled = false; lock(); return; }
       if (res.status === 400) { const e = await res.json(); $("#runState").textContent = "✗ " + (e.error || "ungültige PLZ"); $("#run").disabled = false; return; }
       if (res.status === 409) { $("#runState").textContent = "Es läuft bereits eine Extraktion."; }
       startPolling();
@@ -131,8 +154,11 @@
     $("#plz").addEventListener("input", updateHint);
     $("#plz").addEventListener("keydown", (e) => { if (e.key === "Enter") $("#run").click(); });
 
-    refreshRegions();
-    setInterval(() => { if (!job()) refreshRegions(); }, 10000);
+    $("#unlock").addEventListener("click", () => tryUnlock($("#pw").value, false));
+    $("#pw").addEventListener("keydown", (e) => { if (e.key === "Enter") tryUnlock($("#pw").value, false); });
+
+    if (pw()) tryUnlock(pw(), true); // silently re-unlock if we already have a valid password this session
+    setInterval(() => { if (!job() && !$("#adminContent").classList.contains("hidden")) refreshRegions(); }, 10000);
   </script>
 </body>
 </html>

@@ -20,6 +20,8 @@ const geocode = require("./lib/geocode");
 const ROOT = path.join(__dirname, "..");
 const PORT = process.env.PORT || 4173;
 const locations = JSON.parse(fs.readFileSync(path.join(ROOT, "config/locations.json"), "utf8"));
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "88888888";
+const checkPw = (req) => (req.headers["x-admin-password"] || "") === ADMIN_PASSWORD;
 
 const TYPES = { ".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8",
   ".js": "text/javascript; charset=utf-8", ".json": "application/json; charset=utf-8",
@@ -109,6 +111,18 @@ http.createServer(async (req, res) => {
       return sendJson(res, 200, { configured: db.isConfigured(), regions, dbError });
     }
 
+    // verify the admin password (so the admin UI can unlock without hardcoding it)
+    if (p === "/api/admin/verify" && req.method === "POST") {
+      let body = "";
+      req.on("data", (c) => (body += c));
+      req.on("end", () => {
+        let pw = req.headers["x-admin-password"];
+        try { if (!pw && body) pw = JSON.parse(body).password; } catch {}
+        return sendJson(res, 200, { ok: (pw || "") === ADMIN_PASSWORD });
+      });
+      return;
+    }
+
     if (p === "/api/extract/log") {
       return sendJson(res, 200, { running: job.running, zip: job.zip, ok: job.ok, startedAt: job.startedAt, finishedAt: job.finishedAt, log: job.log });
     }
@@ -120,6 +134,7 @@ http.createServer(async (req, res) => {
       req.on("end", async () => {
         let zip = url.searchParams.get("zip");
         try { if (!zip && body) zip = JSON.parse(body).zip; } catch {}
+        if (!checkPw(req)) return sendJson(res, 401, { error: "Falsches oder fehlendes Passwort" });
         zip = (zip || locations.default).trim();
         if (!/^\d{5}$/.test(zip)) return sendJson(res, 400, { error: "PLZ muss 5-stellig sein" });
         if (job.running) return sendJson(res, 409, { error: "extraction already running", zip: job.zip });

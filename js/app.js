@@ -238,15 +238,16 @@ function renderFavorites() {
     const rows = offers.map((o, i) => {
       const v = retailerVisual(o);
       const label = `${esc(o.productTitle)}${o.unitPrice ? ` · ${esc(o.unitPrice)}` : ""}`;
+      const store = o.storeAddress ? `<span class="ostore">📍 ${esc(o.storeAddress)}${o.storeDistance != null ? ` · ${o.storeDistance} km` : ""}</span>` : "";
       const price = `${esc(o.priceFormatted) || eur(o.price)}${o.wasPrice ? ` <s>${eur(o.wasPrice)}</s>` : ""}`;
-      return `<div class="orow ${i === 0 ? "win" : ""}">${chipHTML(v)}<span class="oname">${label}</span><span class="oprice">${price}</span></div>`;
+      return `<div class="orow ${i === 0 ? "win" : ""}">${chipHTML(v)}<span class="oname"><span class="otitle">${label}</span>${store}</span><span class="oprice">${price}</span></div>`;
     }).join("");
 
     card.innerHTML = `
       <div class="rescard-top">
         <div class="titles">
           <div class="pname">${esc(fav.title)}${deal ? `<span class="tag-offer">${t("dealTag")}</span>` : ""}</div>
-          <div class="punit">${chipHTML(bv)}${best.validUntil ? ` · ${t("validUntil", fmtShort(best.validUntil))}` : ""}</div>
+          <div class="punit">${chipHTML(bv)}${best.storeAddress ? ` · <span class="pstore">📍 ${esc(best.storeAddress)}${best.storeDistance != null ? ` · ${best.storeDistance} km` : ""}</span>` : ""}${best.validUntil ? ` · ${t("validUntil", fmtShort(best.validUntil))}` : ""}</div>
         </div>
         <div class="best">
           <div class="price ${deal ? "deal" : ""}">${esc(best.priceFormatted) || eur(best.price)}</div>

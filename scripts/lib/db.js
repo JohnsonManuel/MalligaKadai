@@ -80,12 +80,16 @@ async function ensureSchema(pool) {
     );`);
   await pool.query(`CREATE INDEX IF NOT EXISTS sparfuchs_offers_extraction_idx ON sparfuchs_offers (extraction_id);`);
   await pool.query(`CREATE INDEX IF NOT EXISTS sparfuchs_offers_zip_idx ON sparfuchs_offers (zip);`);
+  // store/branch columns (added later; safe on our own table)
+  await pool.query(`ALTER TABLE sparfuchs_offers ADD COLUMN IF NOT EXISTS store_name TEXT;`);
+  await pool.query(`ALTER TABLE sparfuchs_offers ADD COLUMN IF NOT EXISTS store_address TEXT;`);
+  await pool.query(`ALTER TABLE sparfuchs_offers ADD COLUMN IF NOT EXISTS store_distance NUMERIC(6,2);`);
 }
 
 const OFFER_COLS = [
   "extraction_id","zip","offer_id","retailer","retailer_id","chain_id","product_title","description",
   "price","price_formatted","was_price","unit_price","valid_from","valid_until","brochure_id","page",
-  "category","image_url","search_text"
+  "category","image_url","search_text","store_name","store_address","store_distance"
 ];
 
 // Save one extraction batch (append-only). Returns { extractionId, inserted }.
@@ -119,7 +123,8 @@ async function saveExtraction(meta, offers) {
           (typeof o.price === "number" ? o.price : null), o.priceFormatted || null,
           (typeof o.wasPrice === "number" ? o.wasPrice : null), o.unitPrice || null,
           o.validFrom || null, o.validUntil || null, o.brochureId || null,
-          (Number.isInteger(o.page) ? o.page : null), o.category || null, o.imageUrl || null, o.searchText || null
+          (Number.isInteger(o.page) ? o.page : null), o.category || null, o.imageUrl || null, o.searchText || null,
+          o.storeName || null, o.storeAddress || null, (typeof o.storeDistance === "number" ? o.storeDistance : null)
         );
         return "(" + OFFER_COLS.map((_, c) => `$${base + c + 1}`).join(",") + ")";
       });
@@ -172,7 +177,8 @@ async function latestOffers(zip) {
     `SELECT offer_id AS id, retailer, retailer_id AS "retailerId", chain_id AS "chainId",
             product_title AS "productTitle", description, price::float8 AS price, price_formatted AS "priceFormatted",
             was_price::float8 AS "wasPrice", unit_price AS "unitPrice", valid_from AS "validFrom",
-            valid_until AS "validUntil", brochure_id AS "brochureId", page, category, image_url AS "imageUrl", search_text AS "searchText"
+            valid_until AS "validUntil", brochure_id AS "brochureId", page, category, image_url AS "imageUrl", search_text AS "searchText",
+            store_name AS "storeName", store_address AS "storeAddress", store_distance::float8 AS "storeDistance"
      FROM sparfuchs_offers WHERE extraction_id=$1 ORDER BY price NULLS LAST`, [ext.id]);
   return {
     zip: ext.zip, city: ext.city,
